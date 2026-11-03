@@ -14,7 +14,7 @@ async function submit() {
     error.value = '';
     const session = await loginUser({ email: form.email, password: form.password });
     storeSession(session);
-    router.push('/');
+    router.push('/home');
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Connexion impossible.';
   } finally {
@@ -130,4 +130,3 @@ button:disabled {
   font-weight: 700;
 }
 </style>
-

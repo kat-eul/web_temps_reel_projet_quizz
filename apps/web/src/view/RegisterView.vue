@@ -14,7 +14,7 @@ async function submit() {
     error.value = '';
     const session = await registerUser(form);
     storeSession(session);
-    router.push('/');
+    router.push('/home');
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Impossible de créer le compte.';
   } finally {
@@ -135,4 +135,3 @@ button:disabled {
   font-weight: 700;
 }
 </style>
-
