@@ -188,7 +188,7 @@ Les fonctionnalités suivantes pourront être ajoutées dans des versions ultér
 
 Le MVP sera considéré comme fonctionnel lorsque :
 
-- Un utilisateur peut créer un compte et se connecter.
+- Un utilisateur peut créer un compte et se connecter - OK
 - Un administrateur a accès à une page des gestion des quizz. Il ne visualise pour l'instant que les quizz pré-créés dans la base de données.
 - Un utilisateur peut créer une salle publique.
 - Les autres utilisateurs peuvent découvrir et demander à rejoindre cette salle.
