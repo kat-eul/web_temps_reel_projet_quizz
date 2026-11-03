@@ -27,6 +27,16 @@ model Quiz {
   title     String
   createur  String
   questions Question[]
+  rooms     Room[]
+}
+
+model Room {
+  id             Int      @id @default(autoincrement())
+  name           String   @unique
+  nbParticipants Int
+  quizId         Int
+  quiz           Quiz     @relation(fields: [quizId], references: [id])
+  createdAt      DateTime @default(now())
 }
 
 model Question {
