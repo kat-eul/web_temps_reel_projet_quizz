@@ -1,0 +1,10 @@
+{
+  "name": "quizz",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build:shared": "npm run build -w @quizz/shared",
+    "dev:api": "npm run start:dev -w @quizz/api",
+    "dev:web": "npm run dev -w @quizz/web"
+  }
+}
