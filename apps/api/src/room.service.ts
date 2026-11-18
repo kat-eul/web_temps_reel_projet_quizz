@@ -4,6 +4,9 @@ import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class RoomService implements OnModuleInit {
+  private roomVersion = 0;
+  private readonly pendingPolls = new Set<(changed: boolean) => void>();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit(): Promise<void> {
@@ -62,7 +65,7 @@ export class RoomService implements OnModuleInit {
       },
     });
 
-    return {
+    const createdRoom = {
       id: room.id,
       name: room.name,
       nbMaxParticipants: room.nbMaxParticipants,
@@ -70,6 +73,8 @@ export class RoomService implements OnModuleInit {
       quizId: room.quizId,
       createdAt: room.createdAt.toISOString(),
     };
+    this.notifyChanged();
+    return createdRoom;
   }
 
   async join(roomId: number, userId: number): Promise<Room> {
@@ -99,6 +104,8 @@ export class RoomService implements OnModuleInit {
         data: { nbParticipants },
       });
 
+      this.notifyChanged();
+
       return {
         id: updated.id,
         name: updated.name,
@@ -125,6 +132,9 @@ export class RoomService implements OnModuleInit {
             participants: { none: {} },
           },
         });
+        if (deleted.count > 0) {
+          this.notifyChanged();
+        }
         return deleted.count > 0;
       }
 
@@ -132,6 +142,7 @@ export class RoomService implements OnModuleInit {
         where: { id: roomId },
         data: { nbParticipants },
       });
+      this.notifyChanged();
       return false;
     });
   }
@@ -140,6 +151,51 @@ export class RoomService implements OnModuleInit {
     const result = await this.prisma.room.deleteMany({
       where: { participants: { none: {} } },
     });
+    if (result.count > 0) {
+      this.notifyChanged();
+    }
     return result.count;
+  }
+
+  async poll(version: number): Promise<{
+    rooms: Room[];
+    version: number;
+    changed: boolean;
+  }> {
+    if (version !== this.roomVersion) {
+      return {
+        rooms: await this.list(),
+        version: this.roomVersion,
+        changed: true,
+      };
+    }
+
+    const changed = await new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pendingPolls.delete(resolvePoll);
+        resolve(false);
+      }, 30_000);
+
+      const resolvePoll = (hasChanged: boolean) => {
+        clearTimeout(timeout);
+        this.pendingPolls.delete(resolvePoll);
+        resolve(hasChanged);
+      };
+
+      this.pendingPolls.add(resolvePoll);
+    });
+
+    return {
+      rooms: await this.list(),
+      version: this.roomVersion,
+      changed,
+    };
+  }
+
+  private notifyChanged(): void {
+    this.roomVersion += 1;
+    for (const resolve of Array.from(this.pendingPolls)) {
+      resolve(true);
+    }
   }
 }

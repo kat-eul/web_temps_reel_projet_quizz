@@ -224,10 +224,10 @@ button:disabled {
 </style>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { listQuizzes } from '../services/quiz';
-import { createRoom, listRooms } from '../services/room';
+import { createRoom, listRooms, pollRooms } from '../services/room';
 import type { Quiz, Room } from '@quizz/shared';
 
 const router = useRouter();
@@ -236,6 +236,10 @@ const quizzes = ref<Quiz[]>([]);
 const loading = ref(false);
 const error = ref('');
 const isModalOpen = ref(false);
+let roomsVersion = 0;
+let pollingController: AbortController | null = null;
+let polling = false;
+let active = true;
 const form = reactive({
   name: '',
   nbMaxParticipants: 8,
@@ -253,6 +257,31 @@ async function fetchData() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Impossible de charger les données.';
   }
+}
+
+async function startRoomPolling() {
+  if (polling) return;
+  polling = true;
+
+  pollingController = new AbortController();
+  while (active) {
+    try {
+      const result = await pollRooms(roomsVersion, pollingController.signal);
+      rooms.value = result.rooms;
+      roomsVersion = result.version;
+      error.value = '';
+    } catch (err) {
+      if (!active || (err instanceof DOMException && err.name === 'AbortError')) {
+        break;
+      }
+      error.value = err instanceof Error
+        ? err.message
+        : 'Impossible de surveiller les salles.';
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
+  polling = false;
 }
 
 async function submitCreateRoom() {
@@ -277,5 +306,11 @@ async function submitCreateRoom() {
 
 onMounted(() => {
   void fetchData();
+  void startRoomPolling();
+});
+
+onBeforeUnmount(() => {
+  active = false;
+  pollingController?.abort();
 });
 </script>

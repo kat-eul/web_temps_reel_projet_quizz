@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, UsePipes } from '@nestjs/common';
-import { CreateRoomSchema, Room } from '@quizz/shared';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UsePipes } from '@nestjs/common';
+import { CreateRoomSchema, Room, RoomPollResponse, RoomPollSchema } from '@quizz/shared';
 import { ZodValidationPipe } from './zod-validation.pipe';
 import { RoomService } from './room.service';
 import { AuthService } from './auth.service';
@@ -14,6 +14,12 @@ export class RoomController {
   @Get()
   async list(): Promise<Room[]> {
     return this.roomService.list();
+  }
+
+  @Get('poll')
+  @UsePipes(new ZodValidationPipe(RoomPollSchema))
+  async poll(@Query() query: { version: number }): Promise<RoomPollResponse> {
+    return this.roomService.poll(query.version);
   }
 
   @Get(':id')

@@ -19,5 +19,17 @@ export const RoomMembershipSchema = z.object({
   roomId: z.coerce.number().int().positive(),
 });
 
+export const RoomPollSchema = z.object({
+  version: z.coerce.number().int().min(0),
+});
+
+export const RoomPollResponseSchema = z.object({
+  rooms: z.array(RoomSchema),
+  version: z.number().int().min(0),
+  changed: z.boolean(),
+});
+
 export type Room = z.infer<typeof RoomSchema>;
 export type CreateRoomInput = z.infer<typeof CreateRoomSchema>;
+export type RoomPollInput = z.infer<typeof RoomPollSchema>;
+export type RoomPollResponse = z.infer<typeof RoomPollResponseSchema>;
