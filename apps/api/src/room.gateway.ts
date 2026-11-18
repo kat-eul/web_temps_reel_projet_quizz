@@ -8,9 +8,14 @@ import {
   WsException,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { RoomMembershipSchema } from '@quizz/shared';
+import {
+  ChatHistorySchema,
+  RoomMembershipSchema,
+  SendChatMessageSchema,
+} from '@quizz/shared';
 import { AuthService } from './auth.service';
 import { RoomService } from './room.service';
+import { ChatService } from './chat.service';
 
 @WebSocketGateway({ cors: { origin: true } })
 export class RoomGateway implements OnGatewayDisconnect {
@@ -22,6 +27,7 @@ export class RoomGateway implements OnGatewayDisconnect {
   constructor(
     private readonly roomService: RoomService,
     private readonly authService: AuthService,
+    private readonly chatService: ChatService,
   ) {}
 
   @SubscribeMessage('room:join')
@@ -41,6 +47,62 @@ export class RoomGateway implements OnGatewayDisconnect {
     this.socketRooms.set(client.id, { roomId: room.id, userId });
     client.join(`room:${room.id}`);
     this.server.to(`room:${room.id}`).emit('room:participant-updated', room);
+
+    const messages = await this.chatService.history(room.id, userId);
+    client.emit('room:chat-history', messages);
+  }
+
+  @SubscribeMessage('room:chat-history')
+  async getChatHistory(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: unknown,
+  ) {
+    const result = ChatHistorySchema.safeParse(payload);
+    if (!result.success) {
+      throw new WsException('Payload d’historique invalide.');
+    }
+
+    const membership = this.socketRooms.get(client.id);
+    if (!membership || membership.roomId !== result.data.roomId) {
+      throw new WsException('Vous n’appartenez pas à cette salle.');
+    }
+
+    const messages = await this.chatService.history(
+      result.data.roomId,
+      membership.userId,
+    );
+    client.emit('room:chat-history', messages);
+  }
+
+  @SubscribeMessage('room:chat-send')
+  async sendChatMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: unknown,
+  ): Promise<{ ok: true; message: unknown } | { ok: false; error: string }> {
+    const result = SendChatMessageSchema.safeParse(payload);
+    if (!result.success) {
+      return { ok: false, error: 'Message vide ou trop long.' };
+    }
+
+    const membership = this.socketRooms.get(client.id);
+    if (!membership || membership.roomId !== result.data.roomId) {
+      return { ok: false, error: 'Vous n’appartenez pas à cette salle.' };
+    }
+
+    try {
+      const message = await this.chatService.send(
+        result.data.roomId,
+        membership.userId,
+        result.data.content,
+      );
+      this.server.to(`room:${result.data.roomId}`).emit('room:chat-message', message);
+      return { ok: true, message };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Impossible d’envoyer le message.',
+      };
+    }
   }
 
   @SubscribeMessage('room:leave')

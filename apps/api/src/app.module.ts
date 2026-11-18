@@ -9,10 +9,11 @@ import { QuizListController } from './quiz-list.controller';
 import { RoomController } from './room.controller';
 import { RoomService } from './room.service';
 import { RoomGateway } from './room.gateway';
+import { ChatService } from './chat.service';
 
 @Module({
   imports: [PrismaModule],
   controllers: [HealthController, AuthController, QuizController, QuizListController, RoomController],
-  providers: [AuthService, QuizService, RoomService, RoomGateway],
+  providers: [AuthService, QuizService, RoomService, RoomGateway, ChatService],
 })
 export class AppModule {}

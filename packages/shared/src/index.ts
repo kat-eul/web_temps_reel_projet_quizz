@@ -2,3 +2,4 @@ export * from './health';
 export * from './auth';
 export * from './quiz';
 export * from './room';
+export * from './chat';

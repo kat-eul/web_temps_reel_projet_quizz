@@ -21,6 +21,7 @@ model User {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   roomParticipations RoomParticipant[]
+  chatMessages      ChatMessage[]
 }
 
 model Quiz {
@@ -39,7 +40,20 @@ model Room {
   quizId          Int
   quiz            Quiz              @relation(fields: [quizId], references: [id])
   participants    RoomParticipant[]
+  chatMessages    ChatMessage[]
   createdAt       DateTime          @default(now())
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  roomId    Int
+  senderId  Int
+  content   String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
 }
 
 model RoomParticipant {
