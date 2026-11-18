@@ -29,8 +29,10 @@ export class RoomController {
 
   @Post()
   @UsePipes(new ZodValidationPipe(CreateRoomSchema))
-  async create(@Body() body: any): Promise<Room> {
-    return this.roomService.create(body);
+  async create(@Req() req: any, @Body() body: any): Promise<Room> {
+    const authorization = req.headers.authorization ?? '';
+    const ownerId = this.authService.getAuthenticatedUserId(authorization);
+    return this.roomService.create(body, ownerId);
   }
 
   @Post(':id/join')

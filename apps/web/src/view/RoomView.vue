@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import type { ChatMessage, Room } from '@quizz/shared';
+import { useRouter } from 'vue-router';
+import type { ChatMessage, Room, RoomStarted } from '@quizz/shared';
 import { io, type Socket } from 'socket.io-client';
 import { getStoredSession } from '../services/auth';
 
 const route = useRoute();
+const router = useRouter();
 const room = ref<Room | null>(null);
 const socket = ref<Socket | null>(null);
 const messages = ref<ChatMessage[]>([]);
@@ -13,6 +15,9 @@ const draft = ref('');
 const chatError = ref('');
 const connectionError = ref('');
 const chatScroll = ref<HTMLElement | null>(null);
+const startError = ref('');
+const starting = ref(false);
+let gameStarted = false;
 
 onMounted(async () => {
   const roomId = Number(route.params.id);
@@ -44,6 +49,10 @@ onMounted(async () => {
     socket.value.on('room:participant-updated', (updated: Room) => {
       room.value = updated;
     });
+    socket.value.on('room:started', (game: RoomStarted) => {
+      gameStarted = true;
+      void router.push({ name: 'game', params: { id: String(game.roomId) } });
+    });
     socket.value.on('room:deleted', () => {
       room.value = null;
     });
@@ -65,8 +74,31 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (!socket.value || !room.value) return;
-  socket.value.emit('room:leave', { roomId: room.value.id });
+  if (!gameStarted) {
+    socket.value.emit('room:leave', { roomId: room.value.id });
+  }
   socket.value.disconnect();
+});
+
+function startGame() {
+  if (!socket.value?.connected || !room.value) return;
+  starting.value = true;
+  startError.value = '';
+  socket.value.emit(
+    'room:start',
+    { roomId: room.value.id },
+    (response: { ok: boolean; error?: string }) => {
+      starting.value = false;
+      if (!response.ok) {
+        startError.value = response.error ?? 'Impossible de lancer la partie.';
+      }
+    },
+  );
+}
+
+const isOwner = computed(() => {
+  const session = getStoredSession();
+  return Boolean(session && room.value && room.value.ownerId === session.user.id);
 });
 
 async function scrollChatToBottom() {
@@ -121,6 +153,12 @@ function sendMessage() {
       <h1>{{ room.name }}</h1>
       <p>Quiz sélectionné : n°{{ room.quizId }}</p>
       <p>Participants : {{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</p>
+      <div v-if="isOwner" class="start-actions">
+        <button type="button" class="start-button" :disabled="starting" @click="startGame">
+          {{ starting ? 'Lancement...' : 'Lancer la partie' }}
+        </button>
+        <p v-if="startError" class="start-error" role="alert">{{ startError }}</p>
+      </div>
 
       <section class="chat" aria-label="Tchat de la salle">
         <header class="chat-header">
@@ -211,6 +249,31 @@ h1 {
 
 .connection-error,
 .chat-error {
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.start-actions {
+  margin: 1rem 0;
+}
+
+.start-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  background: #16a34a;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.start-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.start-error {
+  margin: 0.5rem 0 0;
   color: #b91c1c;
   font-size: 0.875rem;
 }

@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import {
   ChatHistorySchema,
   RoomMembershipSchema,
+  RoomStartSchema,
   SendChatMessageSchema,
 } from '@quizz/shared';
 import { AuthService } from './auth.service';
@@ -25,9 +26,9 @@ export class RoomGateway implements OnGatewayDisconnect {
   private readonly socketRooms = new Map<string, { roomId: number; userId: number }>();
 
   constructor(
-    private readonly roomService: RoomService,
-    private readonly authService: AuthService,
-    private readonly chatService: ChatService,
+      private readonly roomService: RoomService,
+      private readonly authService: AuthService,
+      private readonly chatService: ChatService,
   ) {}
 
   @SubscribeMessage('room:join')
@@ -48,14 +49,19 @@ export class RoomGateway implements OnGatewayDisconnect {
     client.join(`room:${room.id}`);
     this.server.to(`room:${room.id}`).emit('room:participant-updated', room);
 
+    const game = await this.roomService.getGameState(room.id);
+    if (game) {
+      client.emit('room:started', game);
+    }
+
     const messages = await this.chatService.history(room.id, userId);
     client.emit('room:chat-history', messages);
   }
 
   @SubscribeMessage('room:chat-history')
   async getChatHistory(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: unknown,
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
   ) {
     const result = ChatHistorySchema.safeParse(payload);
     if (!result.success) {
@@ -68,16 +74,16 @@ export class RoomGateway implements OnGatewayDisconnect {
     }
 
     const messages = await this.chatService.history(
-      result.data.roomId,
-      membership.userId,
+        result.data.roomId,
+        membership.userId,
     );
     client.emit('room:chat-history', messages);
   }
 
   @SubscribeMessage('room:chat-send')
   async sendChatMessage(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: unknown,
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
   ): Promise<{ ok: true; message: unknown } | { ok: false; error: string }> {
     const result = SendChatMessageSchema.safeParse(payload);
     if (!result.success) {
@@ -91,9 +97,9 @@ export class RoomGateway implements OnGatewayDisconnect {
 
     try {
       const message = await this.chatService.send(
-        result.data.roomId,
-        membership.userId,
-        result.data.content,
+          result.data.roomId,
+          membership.userId,
+          result.data.content,
       );
       this.server.to(`room:${result.data.roomId}`).emit('room:chat-message', message);
       return { ok: true, message };
@@ -101,6 +107,34 @@ export class RoomGateway implements OnGatewayDisconnect {
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'Impossible d’envoyer le message.',
+      };
+    }
+  }
+
+  @SubscribeMessage('room:start')
+  async start(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ ok: true; game: unknown } | { ok: false; error: string }> {
+    const userId = this.getAuthenticatedUserId(client);
+    const result = RoomStartSchema.safeParse(payload);
+    if (!result.success) {
+      return { ok: false, error: 'Payload de lancement invalide.' };
+    }
+
+    const membership = this.socketRooms.get(client.id);
+    if (!membership || membership.roomId !== result.data.roomId) {
+      return { ok: false, error: 'Vous n’appartenez pas à cette salle.' };
+    }
+
+    try {
+      const game = await this.roomService.start(result.data.roomId, userId);
+      this.server.to(`room:${result.data.roomId}`).emit('room:started', game);
+      return { ok: true, game };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Impossible de lancer la partie.',
       };
     }
   }
@@ -128,8 +162,8 @@ export class RoomGateway implements OnGatewayDisconnect {
   }
 
   private async leaveSocket(
-    client: Socket,
-    membership: { roomId: number; userId: number },
+      client: Socket,
+      membership: { roomId: number; userId: number },
   ): Promise<void> {
     const deleted = await this.roomService.leave(membership.roomId, membership.userId);
     this.socketRooms.delete(client.id);
@@ -146,10 +180,9 @@ export class RoomGateway implements OnGatewayDisconnect {
   }
 
   private getAuthenticatedUserId(client: Socket): number {
-    const token =
-      (client.handshake.auth?.token as string | undefined) ??
-      (client.handshake.headers.authorization as string | undefined) ??
-      '';
+    const token = (client.handshake.auth?.token as string | undefined) ??
+        (client.handshake.headers.authorization as string | undefined) ??
+        '';
     return this.authService.getAuthenticatedUserId(token);
   }
 }
