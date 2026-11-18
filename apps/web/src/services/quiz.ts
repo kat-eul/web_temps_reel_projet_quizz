@@ -16,4 +16,3 @@ async function apiRequest<T>(path: string): Promise<T> {
 export async function listQuizzes(): Promise<Quiz[]> {
   return apiRequest<Quiz[]>('/quizz');
 }
-

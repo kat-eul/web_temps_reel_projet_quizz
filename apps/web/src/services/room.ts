@@ -27,4 +27,3 @@ export async function listRooms(): Promise<Room[]> {
 export async function createRoom(input: CreateRoomInput): Promise<Room> {
   return apiRequest<Room>('/rooms', input);
 }
-

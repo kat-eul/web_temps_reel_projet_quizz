@@ -23,4 +23,3 @@ export class RoomController {
     return this.roomService.create(body);
   }
 }
-

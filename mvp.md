@@ -190,7 +190,7 @@ Le MVP sera considéré comme fonctionnel lorsque :
 
 - Un utilisateur peut créer un compte et se connecter - OK
 - Un administrateur a accès à une page des gestion des quizz. Il ne visualise pour l'instant que les quizz pré-créés dans la base de données.
-- Un utilisateur peut créer une salle publique.
+- Un utilisateur peut créer une salle publique. OK
 - Les autres utilisateurs peuvent découvrir et demander à rejoindre cette salle.
 - L'hôte peut accepter ou refuser les participants.
 - Les participants peuvent indiquer qu'ils sont prêts.
