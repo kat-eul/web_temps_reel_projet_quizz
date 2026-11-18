@@ -12,4 +12,4 @@ RUN npm run build -w @quizz/shared \
  && npm run build -w @quizz/api
 ENV PORT=3000
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma db execute --schema apps/api/prisma/schema.prisma --file apps/api/prisma/migrations/202611181130_room_lifecycle/migration.sql && npx prisma db push --accept-data-loss --schema apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss --schema apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]
