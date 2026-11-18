@@ -1,10 +1,14 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { CreateRoomInput, Room } from '@quizz/shared';
 import { PrismaService } from './prisma.service';
 
 @Injectable()
-export class RoomService {
+export class RoomService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.deleteEmptyRooms();
+  }
 
   async list(): Promise<Room[]> {
     const rooms = await this.prisma.room.findMany({
@@ -14,6 +18,7 @@ export class RoomService {
     return rooms.map((room) => ({
       id: room.id,
       name: room.name,
+      nbMaxParticipants: room.nbMaxParticipants,
       nbParticipants: room.nbParticipants,
       quizId: room.quizId,
       createdAt: room.createdAt.toISOString(),
@@ -30,6 +35,7 @@ export class RoomService {
     return {
       id: room.id,
       name: room.name,
+      nbMaxParticipants: room.nbMaxParticipants,
       nbParticipants: room.nbParticipants,
       quizId: room.quizId,
       createdAt: room.createdAt.toISOString(),
@@ -50,7 +56,8 @@ export class RoomService {
     const room = await this.prisma.room.create({
       data: {
         name: input.name.trim(),
-        nbParticipants: input.nbParticipants,
+        nbMaxParticipants: input.nbMaxParticipants,
+        nbParticipants: 0,
         quizId: input.quizId,
       },
     });
@@ -58,9 +65,81 @@ export class RoomService {
     return {
       id: room.id,
       name: room.name,
+      nbMaxParticipants: room.nbMaxParticipants,
       nbParticipants: room.nbParticipants,
       quizId: room.quizId,
       createdAt: room.createdAt.toISOString(),
     };
+  }
+
+  async join(roomId: number, userId: number): Promise<Room> {
+    return this.prisma.$transaction(async (tx) => {
+      const room = await tx.room.findUnique({
+        where: { id: roomId },
+        include: { _count: { select: { participants: true } } },
+      });
+
+      if (!room) {
+        throw new NotFoundException('Salle introuvable.');
+      }
+
+      if (room._count.participants >= room.nbMaxParticipants) {
+        throw new ConflictException('La salle est complète.');
+      }
+
+      await tx.roomParticipant.upsert({
+        where: { roomId_userId: { roomId, userId } },
+        create: { roomId, userId },
+        update: {},
+      });
+
+      const nbParticipants = await tx.roomParticipant.count({ where: { roomId } });
+      const updated = await tx.room.update({
+        where: { id: roomId },
+        data: { nbParticipants },
+      });
+
+      return {
+        id: updated.id,
+        name: updated.name,
+        nbMaxParticipants: updated.nbMaxParticipants,
+        nbParticipants: updated.nbParticipants,
+        quizId: updated.quizId,
+        createdAt: updated.createdAt.toISOString(),
+      };
+    });
+  }
+
+  async leave(roomId: number, userId: number): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.roomParticipant.deleteMany({
+        where: { roomId, userId },
+      });
+
+      const nbParticipants = await tx.roomParticipant.count({ where: { roomId } });
+
+      if (nbParticipants === 0) {
+        const deleted = await tx.room.deleteMany({
+          where: {
+            id: roomId,
+            participants: { none: {} },
+          },
+        });
+        return deleted.count > 0;
+      }
+
+      await tx.room.update({
+        where: { id: roomId },
+        data: { nbParticipants },
+      });
+      return false;
+    });
+  }
+
+  async deleteEmptyRooms(): Promise<number> {
+    const result = await this.prisma.room.deleteMany({
+      where: { participants: { none: {} } },
+    });
+    return result.count;
   }
 }

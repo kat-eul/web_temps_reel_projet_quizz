@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import type { Room } from '@quizz/shared';
+import { io, type Socket } from 'socket.io-client';
+import { getStoredSession } from '../services/auth';
 
 const route = useRoute();
 const room = ref<Room | null>(null);
+const socket = ref<Socket | null>(null);
 
 onMounted(async () => {
   const roomId = Number(route.params.id);
@@ -16,6 +19,26 @@ onMounted(async () => {
   }
 
   room.value = payload;
+
+  const session = getStoredSession();
+  if (session) {
+    socket.value = io('http://localhost:3000', {
+      auth: { token: session.token },
+    });
+    socket.value.on('room:participant-updated', (updated: Room) => {
+      room.value = updated;
+    });
+    socket.value.on('room:deleted', () => {
+      room.value = null;
+    });
+    socket.value.emit('room:join', { roomId });
+  }
+});
+
+onBeforeUnmount(() => {
+  if (!socket.value || !room.value) return;
+  socket.value.emit('room:leave', { roomId: room.value.id });
+  socket.value.disconnect();
 });
 </script>
 
@@ -25,7 +48,7 @@ onMounted(async () => {
       <p class="eyebrow">Salle créée</p>
       <h1>{{ room.name }}</h1>
       <p>Quiz sélectionné : n°{{ room.quizId }}</p>
-      <p>Capacité maximale : {{ room.nbParticipants }} participants</p>
+      <p>Participants : {{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</p>
     </section>
   </main>
 </template>

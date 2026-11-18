@@ -1,11 +1,15 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, UsePipes } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, UsePipes } from '@nestjs/common';
 import { CreateRoomSchema, Room } from '@quizz/shared';
 import { ZodValidationPipe } from './zod-validation.pipe';
 import { RoomService } from './room.service';
+import { AuthService } from './auth.service';
 
 @Controller('rooms')
 export class RoomController {
-  constructor(private readonly roomService: RoomService) {}
+  constructor(
+    private readonly roomService: RoomService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get()
   async list(): Promise<Room[]> {
@@ -21,5 +25,20 @@ export class RoomController {
   @UsePipes(new ZodValidationPipe(CreateRoomSchema))
   async create(@Body() body: any): Promise<Room> {
     return this.roomService.create(body);
+  }
+
+  @Post(':id/join')
+  async join(@Req() req: any, @Param('id', ParseIntPipe) id: number): Promise<Room> {
+    const authorization = req.headers.authorization ?? '';
+    const userId = this.authService.getAuthenticatedUserId(authorization);
+    return this.roomService.join(id, userId);
+  }
+
+  @Post(':id/leave')
+  async leave(@Req() req: any, @Param('id', ParseIntPipe) id: number): Promise<{ deleted: boolean }> {
+    const authorization = req.headers.authorization ?? '';
+    const userId = this.authService.getAuthenticatedUserId(authorization);
+    const deleted = await this.roomService.leave(id, userId);
+    return { deleted };
   }
 }

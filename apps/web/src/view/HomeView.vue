@@ -17,7 +17,7 @@
             <h2>{{ room.name }}</h2>
             <p>Quiz n°{{ room.quizId }}</p>
           </div>
-          <span>{{ room.nbParticipants }} max</span>
+          <span>{{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</span>
         </article>
       </div>
       <p v-else class="empty-state">Aucune salle pour le moment.</p>
@@ -38,7 +38,7 @@
 
           <label>
             <span>Nombre maximum de participants</span>
-            <input v-model="form.nbParticipants" type="number" min="2" max="50" required />
+            <input v-model="form.nbMaxParticipants" type="number" min="2" max="50" required />
           </label>
 
           <label>
@@ -238,7 +238,7 @@ const error = ref('');
 const isModalOpen = ref(false);
 const form = reactive({
   name: '',
-  nbParticipants: 8,
+  nbMaxParticipants: 8,
   quizId: 1,
 });
 
@@ -262,7 +262,7 @@ async function submitCreateRoom() {
 
     const room = await createRoom({
       name: form.name,
-      nbParticipants: Number(form.nbParticipants),
+      nbMaxParticipants: Number(form.nbMaxParticipants),
       quizId: Number(form.quizId),
     });
 

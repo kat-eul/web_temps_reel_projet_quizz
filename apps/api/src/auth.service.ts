@@ -73,6 +73,14 @@ export class AuthService {
     return this.buildAuthResponse(user);
   }
 
+  getAuthenticatedUserId(authorization: string): number {
+    const payload = this.verifyToken(authorization);
+    if (!payload) {
+      throw new UnauthorizedException('Token invalide.');
+    }
+    return payload.userId;
+  }
+
   private async ensureAdminAccount() {
     const admin = await this.prisma.user.findFirst({
       where: {
@@ -167,4 +175,3 @@ function createToken(userId: number, role: UserRole) {
 
   return `${header}.${payload}.${signature}`;
 }
-
