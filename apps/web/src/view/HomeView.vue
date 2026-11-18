@@ -17,7 +17,17 @@
             <h2>{{ room.name }}</h2>
             <p>Quiz n°{{ room.quizId }}</p>
           </div>
-          <span>{{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</span>
+          <div class="room-card-actions">
+            <span>{{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</span>
+            <button
+              class="primary"
+              type="button"
+              :disabled="joiningRoomId === room.id || room.nbParticipants >= room.nbMaxParticipants"
+              @click="submitJoinRoom(room.id)"
+            >
+              {{ joiningRoomId === room.id ? 'Connexion...' : 'Rejoindre' }}
+            </button>
+          </div>
         </article>
       </div>
       <p v-else class="empty-state">Aucune salle pour le moment.</p>
@@ -145,6 +155,12 @@ h1 {
   font-size: 1.1rem;
 }
 
+.room-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .room-card p,
 .empty-state {
   margin: 0;
@@ -227,13 +243,14 @@ button:disabled {
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { listQuizzes } from '../services/quiz';
-import { createRoom, listRooms, pollRooms } from '../services/room';
+import { createRoom, joinRoom, listRooms, pollRooms } from '../services/room';
 import type { Quiz, Room } from '@quizz/shared';
 
 const router = useRouter();
 const rooms = ref<Room[]>([]);
 const quizzes = ref<Quiz[]>([]);
 const loading = ref(false);
+const joiningRoomId = ref<number | null>(null);
 const error = ref('');
 const isModalOpen = ref(false);
 let roomsVersion = 0;
@@ -269,7 +286,6 @@ async function startRoomPolling() {
       const result = await pollRooms(roomsVersion, pollingController.signal);
       rooms.value = result.rooms;
       roomsVersion = result.version;
-      error.value = '';
     } catch (err) {
       if (!active || (err instanceof DOMException && err.name === 'AbortError')) {
         break;
@@ -301,6 +317,20 @@ async function submitCreateRoom() {
     error.value = err instanceof Error ? err.message : 'Impossible de créer la salle.';
   } finally {
     loading.value = false;
+  }
+}
+
+async function submitJoinRoom(roomId: number) {
+  try {
+    joiningRoomId.value = roomId;
+    error.value = '';
+
+    await joinRoom(roomId);
+    await router.push({ name: 'room', params: { id: String(roomId) } });
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Impossible de rejoindre la salle.';
+  } finally {
+    joiningRoomId.value = null;
   }
 }
 

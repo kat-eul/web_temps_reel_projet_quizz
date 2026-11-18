@@ -78,47 +78,70 @@ export class RoomService implements OnModuleInit {
   }
 
   async join(roomId: number, userId: number): Promise<Room> {
-    return this.prisma.$transaction(async (tx) => {
-      const room = await tx.room.findUnique({
-        where: { id: roomId },
-        include: { _count: { select: { participants: true } } },
-      });
-
-      if (!room) {
+    const joined = await this.prisma.$transaction(async (tx) => {
+      const lockedRooms = await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT "id" FROM "Room" WHERE "id" = ${roomId} FOR UPDATE
+      `;
+      if (lockedRooms.length === 0) {
         throw new NotFoundException('Salle introuvable.');
       }
+      await tx.$queryRaw`
+        SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE
+      `;
 
-      if (room._count.participants >= room.nbMaxParticipants) {
+      const existingMembership = await tx.roomParticipant.findUnique({
+        where: { roomId_userId: { roomId, userId } },
+      });
+      if (existingMembership) {
+        return tx.room.findUniqueOrThrow({ where: { id: roomId } });
+      }
+
+      const otherMembership = await tx.roomParticipant.findFirst({
+        where: { userId, roomId: { not: roomId } },
+        include: { room: true },
+      });
+      if (otherMembership) {
+        throw new ConflictException('Vous êtes déjà connecté à une autre salle.');
+      }
+
+      const nbParticipants = await tx.roomParticipant.count({ where: { roomId } });
+      const room = await tx.room.findUniqueOrThrow({ where: { id: roomId } });
+      if (nbParticipants >= room.nbMaxParticipants) {
         throw new ConflictException('La salle est complète.');
       }
 
-      await tx.roomParticipant.upsert({
-        where: { roomId_userId: { roomId, userId } },
-        create: { roomId, userId },
-        update: {},
+      await tx.roomParticipant.create({
+        data: { roomId, userId },
       });
 
-      const nbParticipants = await tx.roomParticipant.count({ where: { roomId } });
       const updated = await tx.room.update({
         where: { id: roomId },
-        data: { nbParticipants },
+        data: { nbParticipants: nbParticipants + 1 },
       });
 
-      this.notifyChanged();
-
-      return {
-        id: updated.id,
-        name: updated.name,
-        nbMaxParticipants: updated.nbMaxParticipants,
-        nbParticipants: updated.nbParticipants,
-        quizId: updated.quizId,
-        createdAt: updated.createdAt.toISOString(),
-      };
+      return updated;
     });
+
+    this.notifyChanged();
+    return {
+      id: joined.id,
+      name: joined.name,
+      nbMaxParticipants: joined.nbMaxParticipants,
+      nbParticipants: joined.nbParticipants,
+      quizId: joined.quizId,
+      createdAt: joined.createdAt.toISOString(),
+    };
   }
 
   async leave(roomId: number, userId: number): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE
+      `;
+      await tx.$queryRaw`
+        SELECT "id" FROM "Room" WHERE "id" = ${roomId} FOR UPDATE
+      `;
+
       await tx.roomParticipant.deleteMany({
         where: { roomId, userId },
       });
