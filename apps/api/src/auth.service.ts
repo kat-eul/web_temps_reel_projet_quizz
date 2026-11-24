@@ -4,7 +4,10 @@ import { createHmac, randomBytes, scryptSync } from 'crypto';
 import { AuthResponse, LoginUserInput, RegisterUserInput, UserPublic } from '@quizz/shared';
 import { PrismaService } from './prisma.service';
 
-const TOKEN_SECRET = process.env.JWT_SECRET ?? 'quizz-local-secret';
+const TOKEN_SECRET = process.env.JWT_SECRET;
+if (!TOKEN_SECRET) {
+  throw new Error("JWT_SECRET est obligatoire pour démarrer l'API.");
+}
 
 @Injectable()
 export class AuthService {

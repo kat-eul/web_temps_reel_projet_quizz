@@ -34,3 +34,8 @@ Phase 0 — Nettoyage préalable (aucune étape commencée)
 - Statut : terminée et validée (application fonctionnelle après modification).
 - Fichiers : `apps/api/src/auth.service.ts`, `apps/web/src/view/LoginView.vue`.
 - Limite : un ancien compte admin peut subsister dans la base actuelle ; il sera supprimé lors du reset de la base.
+
+## Phase 0 — Tâche 2 : JWT_SECRET obligatoire
+- Statut : terminée et validée (cas nominal et cas négatif vérifiés).
+- Fichiers : `apps/api/src/auth.service.ts`, `docker-compose.yml`.
+- Reporté : test unitaire de `verifyToken`, à faire en Phase 1 avec Vitest.
