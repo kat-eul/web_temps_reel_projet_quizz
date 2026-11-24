@@ -1,0 +1,80 @@
+quiz:
+  title: "Gender Reveal de Julie & Thomas"
+  description: "Quiz famille"
+  theme: pastel
+
+  settings:
+    max_players: 10
+    mode: individual
+    show_answers: manual
+
+teams:
+  enabled: false
+
+questions:
+  - id: q1
+    type: boolean
+    title: "Les parents pensent-ils avoir une fille ?"
+    answer: true
+    points: 1
+
+  - id: q2
+    type: choice
+    title: "Quels prénoms ont été envisagés ?"
+    multiple: true
+    points: 2
+    options:
+      - text: "Emma"
+        correct: true
+      - text: "Louise"
+        correct: true
+      - text: "Alice"
+        correct: false
+
+  - id: q3
+    type: image
+    title: "Qui est ce bébé ?"
+    points: 2
+    media:
+      type: image
+      source: "./images/bebe.jpg"
+    answer:
+      accepted: ["Papa", "Thomas"]
+
+  - id: q4
+    type: text
+    title: "Quel prénom pensez-vous que les parents ont choisi ?"
+    points: 3
+    validation:
+      mode: automatic
+      accepted: ["Léa", "Lea"]
+      fuzzy_matching: true
+
+  - id: q5
+    type: number
+    title: "Quel sera le poids du bébé (en grammes) ?"
+    points: 3
+    range:
+      min: 2000
+      max: 5000
+    answer:
+      value: 3500
+      tolerance: 200
+
+  - id: q6
+    type: music
+    title: "Quelle est cette chanson ?"
+    points: 2
+    media:
+      type: youtube
+      url: "https://youtube.com/xxxxx"
+      clip:
+        start: 35
+        duration: 15
+    answer:
+      mode: choice
+      options:
+        - text: "Thriller"
+          correct: true
+        - text: "Billie Jean"
+          correct: false

@@ -1,7 +1,7 @@
 # Suivi de la fusion
 
 ## Phase actuelle
-Phase 0 — Nettoyage préalable (aucune étape commencée)
+Phase 1 - Copie du moteur et adaptation CJS
 
 ## Étapes de la roadmap
 - [x] Phase 0 — Nettoyage préalable
