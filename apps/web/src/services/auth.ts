@@ -1,6 +1,6 @@
 import type { AuthResponse, LoginUserInput, RegisterUserInput } from '@quizz/shared';
 
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = '/api';
 
 async function apiRequest<T>(path: string, body?: Record<string, unknown>): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {

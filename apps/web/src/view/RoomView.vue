@@ -16,7 +16,7 @@ const chatScroll = ref<HTMLElement | null>(null);
 
 onMounted(async () => {
   const roomId = Number(route.params.id);
-  const response = await fetch(`http://localhost:3000/api/rooms/${roomId}`);
+  const response = await fetch(`/api/rooms/${roomId}`);
   const payload = await response.json();
 
   if (!response.ok) {
@@ -27,7 +27,7 @@ onMounted(async () => {
 
   const session = getStoredSession();
   if (session) {
-    socket.value = io('http://localhost:3000', {
+    socket.value = io({
       auth: { token: session.token },
     });
 

@@ -39,3 +39,9 @@ Phase 0 — Nettoyage préalable (aucune étape commencée)
 - Statut : terminée et validée (cas nominal et cas négatif vérifiés).
 - Fichiers : `apps/api/src/auth.service.ts`, `docker-compose.yml`.
 - Reporté : test unitaire de `verifyToken`, à faire en Phase 1 avec Vitest.
+
+## Phase 0 — Tâche 3 : URL relatives
+- Statut : terminée et validée (requêtes via nginx sur localhost:8080, parcours inscription, connexion, salle, jointure, tchat).
+- Fichiers : `services/auth.ts`, `services/room.ts`, `services/quiz.ts`, `view/RoomView.vue`.
+- Note : Socket.IO observé en polling ; upgrade WebSocket à vérifier ultérieurement.
+- `QuizView.vue` reste à supprimer en tâche 4.
