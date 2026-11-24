@@ -19,10 +19,18 @@ Phase 0 — Nettoyage préalable (aucune étape commencée)
 - État de partie en mémoire ; médias en URL externes ; compte admin supprimé.
 
 ## Modifications réalisées
-Aucune.
+- Baseline : commit `d34c936` sur `fusion/quiz-engine` (suivi initial inclus).
+
+## Vérifications de référence (avant fusion)
+- `docker compose up` : db, api et web démarrent ; `prisma db push` reporte le schéma déjà synchronisé.
+- Parcours fonctionnels validés par l'utilisateur : création de compte, connexion, création de salle, tchat, rejoindre une salle.
 
 ## Problèmes rencontrés
-Aucun.
+- Nom de base `resto` hérité du `.env` (sans impact fonctionnel).
+- `Dockerfile` API : `prisma db push --accept-data-loss` au démarrage (à remplacer en Phase 4).
+- URL `localhost:3000` en dur dans les services web (traité en Phase 0).
 
-## Prochaine étape
-Phase 0, tâche 1 : suppression du compte admin.
+## Phase 0 — Tâche 1 : suppression du compte admin
+- Statut : terminée et validée (application fonctionnelle après modification).
+- Fichiers : `apps/api/src/auth.service.ts`, `apps/web/src/view/LoginView.vue`.
+- Limite : un ancien compte admin peut subsister dans la base actuelle ; il sera supprimé lors du reset de la base.

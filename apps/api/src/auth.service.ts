@@ -4,16 +4,11 @@ import { createHmac, randomBytes, scryptSync } from 'crypto';
 import { AuthResponse, LoginUserInput, RegisterUserInput, UserPublic } from '@quizz/shared';
 import { PrismaService } from './prisma.service';
 
-const ADMIN_EMAIL = 'admin@quizz.local';
-const ADMIN_PSEUDO = 'admin';
-const ADMIN_PASSWORD = 'admin';
 const TOKEN_SECRET = process.env.JWT_SECRET ?? 'quizz-local-secret';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {
-    void this.ensureAdminAccount();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async register(data: RegisterUserInput): Promise<AuthResponse> {
     const existingUser = await this.prisma.user.findFirst({
@@ -79,27 +74,6 @@ export class AuthService {
       throw new UnauthorizedException('Token invalide.');
     }
     return payload.userId;
-  }
-
-  private async ensureAdminAccount() {
-    const admin = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email: ADMIN_EMAIL }, { pseudo: ADMIN_PSEUDO }],
-      },
-    });
-
-    if (admin) {
-      return;
-    }
-
-    await this.prisma.user.create({
-      data: {
-        pseudo: ADMIN_PSEUDO,
-        email: ADMIN_EMAIL,
-        password: hashPassword(ADMIN_PASSWORD),
-        role: UserRole.ADMIN,
-      },
-    });
   }
 
   private buildAuthResponse(user: Prisma.UserGetPayload<Record<string, never>>): AuthResponse {

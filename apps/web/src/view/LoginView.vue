@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { loginUser, storeSession } from '../services/auth';
 
 const router = useRouter();
-const form = reactive({ email: 'admin@quizz.local', password: 'admin' });
+const form = reactive({ email: '', password: '' });
 const error = ref('');
 const loading = ref(false);
 
