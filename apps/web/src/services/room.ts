@@ -42,6 +42,12 @@ export async function createRoom(input: CreateRoomInput): Promise<Room> {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const issues = Array.isArray(payload?.issues)
+        ? payload.issues.map((i: unknown) => (typeof i === 'string' ? i : (i as { message?: string }).message ?? String(i)))
+        : [];
+    if (issues.length > 0) {
+      throw new ApiValidationError(payload?.message ?? 'Quiz invalide', issues);
+    }
     throw new Error(payload?.message ?? 'Impossible de creer la salle.');
   }
   return payload as Room;
@@ -64,4 +70,14 @@ export async function joinRoom(roomId: number): Promise<Room> {
     throw new Error(payload?.message ?? 'Impossible de rejoindre la salle.');
   }
   return payload as Room;
+}
+
+export class ApiValidationError extends Error {
+  readonly issues: string[];
+
+  constructor(message: string, issues: string[]) {
+    super(message);
+    this.name = 'ApiValidationError';
+    this.issues = issues;
+  }
 }

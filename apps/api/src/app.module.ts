@@ -3,8 +3,6 @@ import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { QuizService } from './quiz.service';
-import { QuizListController } from './quiz-list.controller';
 import { RoomController } from './room.controller';
 import { RoomService } from './room.service';
 import { RoomGateway } from './room.gateway';
@@ -12,7 +10,7 @@ import { ChatService } from './chat.service';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [HealthController, AuthController, QuizListController, RoomController],
-  providers: [AuthService, QuizService, RoomService, RoomGateway, ChatService],
+  controllers: [HealthController, AuthController, RoomController],
+  providers: [AuthService, RoomService, RoomGateway, ChatService],
 })
 export class AppModule {}

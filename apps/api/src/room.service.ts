@@ -1,10 +1,5 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { parseQuizString, QuizParseError, QuizYamlSyntaxError } from './quiz-engine/parser/index.js';
 import { CreateRoomInput, Room, RoomStarted } from '@quizz/shared';
 import { PrismaService } from './prisma.service';
 
@@ -40,9 +35,16 @@ export class RoomService implements OnModuleInit {
   }
 
   async create(input: CreateRoomInput, ownerId: number): Promise<Room> {
-    const quiz = await this.prisma.quiz.findUnique({ where: { id: input.quizId } });
-    if (!quiz) {
-      throw new NotFoundException('Le quiz sélectionné est introuvable.');
+    try {
+      parseQuizString(input.quizYaml);
+    } catch (err) {
+      if (err instanceof QuizParseError) {
+        throw new BadRequestException({ message: 'Quiz invalide', issues: err.issues });
+      }
+      if (err instanceof QuizYamlSyntaxError) {
+        throw new BadRequestException({ message: 'Quiz invalide', issues: [err.message] });
+      }
+      throw err;
     }
 
     const existing = await this.prisma.room.findUnique({ where: { name: input.name } });
@@ -55,7 +57,7 @@ export class RoomService implements OnModuleInit {
         name: input.name.trim(),
         nbMaxParticipants: input.nbMaxParticipants,
         nbParticipants: 0,
-        quizId: input.quizId,
+        quizYaml: input.quizYaml,
         ownerId,
       },
     });
@@ -123,101 +125,12 @@ export class RoomService implements OnModuleInit {
     return this.toRoom(joined);
   }
 
-  async start(roomId: number, userId: number): Promise<RoomStarted> {
-    return this.prisma.$transaction(async (tx) => {
-      const lockedRooms = await tx.$queryRaw<Array<{ id: number }>>`
-        SELECT "id" FROM "Room" WHERE "id" = ${roomId} FOR UPDATE
-      `;
-      if (lockedRooms.length === 0) {
-        throw new NotFoundException('Salle introuvable.');
-      }
-
-      const room = await tx.room.findUnique({
-        where: { id: roomId },
-        include: { quiz: { include: { questions: { orderBy: { id: 'asc' }, take: 1 } } } },
-      });
-      if (!room) {
-        throw new NotFoundException('Salle introuvable.');
-      }
-      if (room.ownerId !== userId) {
-        throw new ForbiddenException('Seul le propriétaire de la salle peut lancer la partie.');
-      }
-      if (room.state !== 'WAITING') {
-        throw new ConflictException('La partie est déjà lancée ou terminée.');
-      }
-
-      const question = room.quiz.questions[0];
-      if (!question) {
-        throw new ConflictException('Ce quiz ne contient aucune question.');
-      }
-
-      const questionAnswers = await tx.answer.findMany({
-        where: { questionId: question.id },
-        select: { id: true, enonce: true },
-      });
-      const questionStartedAt = new Date();
-      const questionEndsAt = new Date(questionStartedAt.getTime() + this.questionDurationMs);
-
-      const started = await tx.room.updateMany({
-        where: { id: roomId, state: 'WAITING' },
-        data: {
-          state: 'IN_PROGRESS',
-          currentQuestionId: question.id,
-          questionStartedAt,
-          questionEndsAt,
-        },
-      });
-      if (started.count !== 1) {
-        throw new ConflictException('La partie est déjà lancée ou terminée.');
-      }
-
-      this.notifyChanged();
-      return {
-        roomId,
-        state: 'IN_PROGRESS',
-        question: {
-          id: question.id,
-          question: question.question,
-          answers: questionAnswers,
-        },
-        questionStartedAt: questionStartedAt.toISOString(),
-        questionEndsAt: questionEndsAt.toISOString(),
-      };
-    });
+  async start(_roomId: number, _userId: number): Promise<RoomStarted> {
+    throw new ConflictException('Le déroulement de la partie sera disponible prochainement.');
   }
 
-  async getGameState(roomId: number): Promise<RoomStarted | null> {
-    const room = await this.prisma.room.findUnique({
-      where: { id: roomId },
-      include: {
-        currentQuestion: {
-          include: {
-            answers: { select: { id: true, enonce: true } },
-          },
-        },
-      },
-    });
-    if (
-      !room ||
-      room.state !== 'IN_PROGRESS' ||
-      !room.currentQuestion ||
-      !room.questionStartedAt ||
-      !room.questionEndsAt
-    ) {
-      return null;
-    }
-
-    return {
-      roomId: room.id,
-      state: 'IN_PROGRESS',
-      question: {
-        id: room.currentQuestion.id,
-        question: room.currentQuestion.question,
-        answers: room.currentQuestion.answers,
-      },
-      questionStartedAt: room.questionStartedAt.toISOString(),
-      questionEndsAt: room.questionEndsAt.toISOString(),
-    };
+  async getGameState(_roomId: number): Promise<RoomStarted | null> {
+    return null;
   }
 
   async leave(roomId: number, userId: number): Promise<boolean> {
@@ -314,12 +227,8 @@ export class RoomService implements OnModuleInit {
     name: string;
     nbMaxParticipants: number;
     nbParticipants: number;
-    quizId: number;
     ownerId: number;
     state: 'WAITING' | 'IN_PROGRESS' | 'FINISHED';
-    currentQuestionId: number | null;
-    questionStartedAt: Date | null;
-    questionEndsAt: Date | null;
     createdAt: Date;
   }): Room {
     return {
@@ -327,12 +236,8 @@ export class RoomService implements OnModuleInit {
       name: room.name,
       nbMaxParticipants: room.nbMaxParticipants,
       nbParticipants: room.nbParticipants,
-      quizId: room.quizId,
       ownerId: room.ownerId,
       state: room.state,
-      currentQuestionId: room.currentQuestionId,
-      questionStartedAt: room.questionStartedAt?.toISOString() ?? null,
-      questionEndsAt: room.questionEndsAt?.toISOString() ?? null,
       createdAt: room.createdAt.toISOString(),
     };
   }
