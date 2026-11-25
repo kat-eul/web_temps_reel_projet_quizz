@@ -10,12 +10,6 @@ export function normalizeQuiz(input: QuizFileInput): Quiz {
   return {
     title: input.quiz.title,
     description: input.quiz.description,
-    theme: input.quiz.theme,
-    settings: {
-      maxPlayers: input.quiz.settings.max_players,
-      mode: input.quiz.settings.mode,
-      showAnswers: input.quiz.settings.show_answers,
-    },
     teamsEnabled: input.teams?.enabled ?? false,
     questions: input.questions.map((q, index) => normalizeQuestion(q, index)),
   };
@@ -30,7 +24,8 @@ function normalizeQuestion(q: QuestionInput, index: number): Question {
     id: q.id ?? generateId(index),
     title: q.title,
     points: q.points,
-    media: q.media as MediaRef | undefined, // même forme, pas de transformation nécessaire
+    timeLimit: q.time_limit,
+    media: normalizeMedia(q.media),
     answer: normalizeAnswer(q.answer),
   };
 }
@@ -59,4 +54,14 @@ function normalizeAnswer(a: AnswerInput): AnswerSpec {
       throw new Error(`Format de réponse non géré par le normalizer: ${JSON.stringify(_exhaustive)}`);
     }
   }
+}
+
+
+function normalizeMedia(m: QuestionInput['media']): MediaRef | undefined {
+  if (!m) return undefined;
+  return {
+    type: m.type,
+    url: m.url,
+    clip: m.type === 'youtube' && m.clip ? { start: m.clip.start } : undefined,
+  };
 }

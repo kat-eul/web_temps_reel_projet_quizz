@@ -12,13 +12,13 @@ function loadExample(name: string): string {
   return readFileSync(resolve(fixturesDir, name), 'utf-8');
 }
 
+const GENDER_REVEAL_IMAGE_URL = 'https://example.com/bebe.jpg';
+
 describe('parseQuizString — cas valide', () => {
   const quiz = parseQuizString(loadExample('gender-reveal.quiz.yml'));
 
-  it('parse le titre et les settings', () => {
+  it('parse le titre', () => {
     expect(quiz.title).toBe('Gender Reveal de Julie & Thomas');
-    expect(quiz.settings.mode).toBe('individual');
-    expect(quiz.settings.maxPlayers).toBe(10);
   });
 
   it('parse les 6 questions avec leurs ids', () => {
@@ -41,10 +41,10 @@ describe('parseQuizString — cas valide', () => {
     }
   });
 
-  it('parse une question avec média image + réponse choice (découplage)', () => {
+  it('parse une question avec média image (url https) + réponse choice (découplage)', () => {
     const q = quiz.questions[2];
     expect(q.media?.type).toBe('image');
-    expect(q.media?.source).toBe('./images/bebe.jpg');
+    expect(q.media?.url).toBe(GENDER_REVEAL_IMAGE_URL);
     expect(q.answer.mode).toBe('choice');
     if (q.answer.mode === 'choice') {
       expect(q.answer.multiple).toBe(false);
@@ -61,14 +61,29 @@ describe('parseQuizString — cas valide', () => {
     }
   });
 
-  it('parse une question avec média youtube + réponse choice', () => {
+  it('parse le time_limit en timeLimit', () => {
+    expect(quiz.questions[4].timeLimit).toBe(30);
+  });
+
+  it('laisse timeLimit indéfini quand il est absent', () => {
+    expect(quiz.questions[0].timeLimit).toBeUndefined();
+  });
+
+  it('parse une question youtube avec clip.start (sans duration)', () => {
     const q = quiz.questions[5];
     expect(q.media?.type).toBe('youtube');
-    expect(q.media?.url).toBe('https://youtube.com/xxxxx');
+    expect(q.media?.url).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(q.media?.clip).toEqual({ start: 35 });
     expect(q.answer.mode).toBe('choice');
   });
 
-  it('applique les valeurs par défaut (id généré si absent)', () => {
+  it("accepte une question sans média (media est bien optionnel)", () => {
+    expect(quiz.questions[0].media).toBeUndefined();
+  });
+});
+
+describe('parseQuizString — valeurs par défaut', () => {
+  it('génère l\'id et applique points: 1 quand ils sont absents', () => {
     const yamlText = `
 quiz:
   title: "Sans id"
@@ -80,23 +95,34 @@ questions:
 `;
     const q = parseQuizString(yamlText);
     expect(q.questions[0].id).toBe('q1');
-    expect(q.questions[0].points).toBe(1); // valeur par défaut
-    expect(q.settings.maxPlayers).toBe(20); // valeur par défaut
+    expect(q.questions[0].points).toBe(1);
   });
+});
 
-  it("accepte une question sans média (media est bien optionnel)", () => {
-    const q = quiz.questions[0];
-    expect(q.media).toBeUndefined();
+describe('parseQuizString — limite de taille', () => {
+  it('rejette un fichier de plus de 32 Ko', () => {
+    const padding = '# ' + 'x'.repeat(33 * 1024) + '\n';
+    const yamlText = padding + `
+quiz:
+  title: "Trop gros"
+questions:
+  - title: "Vrai ou faux ?"
+    answer:
+      mode: boolean
+      value: true
+`;
+    expect(() => parseQuizString(yamlText)).toThrow(QuizParseError);
   });
 });
 
 describe('parseQuizString — cas invalides', () => {
   it('rejette une réponse choice sans option correcte', () => {
-    expect(() => parseQuizString(loadExample('invalid.quiz.yml'))).toThrow(QuizParseError);
-
+    const text = loadExample('invalid.quiz.yml');
     try {
-      parseQuizString(loadExample('invalid.quiz.yml'));
+      parseQuizString(text);
+      expect.fail('aurait dû lever une erreur');
     } catch (err) {
+      expect(err).toBeInstanceOf(QuizParseError);
       const parseErr = err as QuizParseError;
       expect(parseErr.issues.some((i) => i.includes('correct: true'))).toBe(true);
       expect(parseErr.issues.some((i) => i.includes("question 'q1'"))).toBe(true);
@@ -104,8 +130,10 @@ describe('parseQuizString — cas invalides', () => {
   });
 
   it('rejette un range min >= max', () => {
+    const text = loadExample('invalid.quiz.yml');
     try {
-      parseQuizString(loadExample('invalid.quiz.yml'));
+      parseQuizString(text);
+      expect.fail('aurait dû lever une erreur');
     } catch (err) {
       const parseErr = err as QuizParseError;
       expect(parseErr.issues.some((i) => i.includes("question 'q2'"))).toBe(true);
@@ -142,7 +170,7 @@ questions: [
     expect(() => parseQuizString(brokenYaml)).toThrow(QuizYamlSyntaxError);
   });
 
-  it("rejette un média youtube sans url", () => {
+  it('rejette un média youtube sans url', () => {
     const yamlText = `
 quiz:
   title: "Test"
@@ -154,6 +182,38 @@ questions:
       mode: text
       correction: automatic
       accepted: ["Test"]
+`;
+    expect(() => parseQuizString(yamlText)).toThrow(QuizParseError);
+  });
+
+  it('rejette un média image avec source locale au lieu de url', () => {
+    const yamlText = `
+quiz:
+  title: "Test"
+questions:
+  - title: "Qui ?"
+    media:
+      type: image
+      source: "./images/bebe.jpg"
+    answer:
+      mode: boolean
+      value: true
+`;
+    expect(() => parseQuizString(yamlText)).toThrow(QuizParseError);
+  });
+
+  it('rejette une url image en http (non https)', () => {
+    const yamlText = `
+quiz:
+  title: "Test"
+questions:
+  - title: "Qui ?"
+    media:
+      type: image
+      url: "http://example.com/bebe.jpg"
+    answer:
+      mode: boolean
+      value: true
 `;
     expect(() => parseQuizString(yamlText)).toThrow(QuizParseError);
   });

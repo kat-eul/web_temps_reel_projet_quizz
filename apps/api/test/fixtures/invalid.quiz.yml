@@ -1,7 +1,5 @@
 quiz:
   title: "Quiz de test invalide"
-  settings:
-    mode: individual
 
 questions:
   - id: q1

@@ -1,12 +1,6 @@
 quiz:
   title: "Gender Reveal de Julie & Thomas"
   description: "Quiz famille"
-  theme: pastel
-
-  settings:
-    max_players: 10
-    mode: individual
-    show_answers: manual
 
 teams:
   enabled: false
@@ -33,14 +27,13 @@ questions:
         - text: "Alice"
           correct: false
 
-  # Démonstration du découplage média/réponse : une photo (media) avec une
-  # réponse à choix (answer.mode: choice) plutôt qu'en texte libre.
+  # Média image (URL https) + réponse à choix
   - id: q3
     title: "Qui est ce bébé ?"
     points: 2
     media:
       type: image
-      source: "./images/bebe.jpg"
+      url: "https://example.com/bebe.jpg"
     answer:
       mode: choice
       options:
@@ -61,6 +54,7 @@ questions:
   - id: q5
     title: "Quel sera le poids du bébé (en grammes) ?"
     points: 3
+    time_limit: 30
     answer:
       mode: number
       range:
@@ -69,16 +63,15 @@ questions:
       value: 3500
       tolerance: 200
 
-  # Blindtest : media YouTube + réponse à choix
+  # Blindtest YouTube + réponse à choix
   - id: q6
     title: "Quelle est cette chanson ?"
     points: 2
     media:
       type: youtube
-      url: "https://youtube.com/xxxxx"
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
       clip:
         start: 35
-        duration: 15
     answer:
       mode: choice
       options:
