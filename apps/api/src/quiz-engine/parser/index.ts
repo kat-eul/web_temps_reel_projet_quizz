@@ -7,6 +7,8 @@ import type { Quiz } from '../models/quiz.js';
 export { QuizParseError, QuizYamlSyntaxError } from './errors.js';
 export * from './schema.js';
 
+const MAX_QUIZ_BYTES = 32 * 1024;
+
 /**
  * Pipeline complet : texte YAML → Quiz (modèle interne prêt pour le moteur de jeu).
  *
@@ -15,6 +17,13 @@ export * from './schema.js';
  * [3] normalizeQuiz   : objet validé → modèle interne (ids générés, camelCase)
  */
 export function parseQuizString(yamlText: string): Quiz {
+  const bytes = Buffer.byteLength(yamlText, 'utf8');
+  if (bytes > MAX_QUIZ_BYTES) {
+    throw new QuizParseError([
+      `le fichier YAML fait ${Math.ceil(bytes / 1024)} Ko, la limite est de 32 Ko`,
+    ]);
+  }
+
   const raw = parseYamlText(yamlText);
   const validated = validateSchema(raw);
   return normalizeQuiz(validated);

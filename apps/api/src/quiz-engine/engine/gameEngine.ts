@@ -14,6 +14,7 @@ export class GameEngineError extends Error {}
  */
 export class GameEngine {
   private readonly quiz: Quiz;
+  private readonly maxPlayers: number;
   private state: GameState = 'lobby';
   private currentQuestionIndex = 0;
 
@@ -22,8 +23,9 @@ export class GameEngine {
   // answers[questionId][playerId] = Answer
   private readonly answers = new Map<string, Map<string, Answer>>();
 
-  constructor(quiz: Quiz) {
+  constructor(quiz: Quiz, maxPlayers: number) {
     this.quiz = quiz;
+    this.maxPlayers = maxPlayers;
   }
 
   // --- Joueurs & équipes ---
@@ -32,8 +34,8 @@ export class GameEngine {
     if (this.state === 'finished') {
       throw new GameEngineError('La partie est terminée, impossible de rejoindre.');
     }
-    if (this.players.size >= this.quiz.settings.maxPlayers) {
-      throw new GameEngineError(`La partie est complète (max ${this.quiz.settings.maxPlayers} joueurs).`);
+    if (this.players.size >= this.maxPlayers) {
+      throw new GameEngineError(`La partie est complète (max ${this.maxPlayers} joueurs).`);
     }
     if (this.quiz.teamsEnabled && teamId && !this.teams.has(teamId)) {
       throw new GameEngineError(`L'équipe '${teamId}' n'existe pas.`);

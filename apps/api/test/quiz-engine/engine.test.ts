@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { GameEngine, GameEngineError } from '../../src/quiz-engine/engine/index.js';
 import type { Quiz } from '../../src/quiz-engine/models/quiz.js';
+import { GameEngine, GameEngineError } from '../../src/quiz-engine/engine/index.js';
+
+const MAX_PLAYERS = 3;
 
 function buildQuiz(overrides: Partial<Quiz> = {}): Quiz {
   return {
     title: 'Quiz de test',
-    settings: { maxPlayers: 3, mode: 'individual', showAnswers: 'manual' },
     teamsEnabled: false,
     questions: [
       { id: 'q1', title: 'Vrai ou faux ?', points: 1, answer: { mode: 'boolean', value: true } },
@@ -34,22 +35,26 @@ function buildQuiz(overrides: Partial<Quiz> = {}): Quiz {
   };
 }
 
+function createEngine(overrides: Partial<Quiz> = {}): GameEngine {
+  return new GameEngine(buildQuiz(overrides), MAX_PLAYERS);
+}
+
 describe('GameEngine — cycle de vie et scoring de base', () => {
   let engine: GameEngine;
   let alice: ReturnType<GameEngine['addPlayer']>;
 
   beforeEach(() => {
-    engine = new GameEngine(buildQuiz());
+    engine = createEngine();
     alice = engine.addPlayer('Alice');
   });
 
-  it('démarre en lobby et n\'accepte pas les réponses avant startGame', () => {
+  it("démarre en lobby et n'accepte pas les réponses avant startGame", () => {
     expect(engine.getSnapshot().state).toBe('lobby');
     const result = engine.submitAnswer(alice.id, true);
     expect(result.accepted).toBe(false);
   });
 
-  it('refuse de dépasser max_players', () => {
+  it('refuse de dépasser la limite de joueurs passée au constructeur', () => {
     engine.addPlayer('Bob');
     engine.addPlayer('Charlie');
     expect(() => engine.addPlayer('Dave')).toThrow(GameEngineError);
@@ -107,19 +112,19 @@ describe('GameEngine — cycle de vie et scoring de base', () => {
 
 describe('GameEngine — choix multiple', () => {
   it("valide uniquement si l'ensemble sélectionné correspond exactement aux bonnes réponses", () => {
-    const engine = new GameEngine(buildQuiz());
+    const engine = createEngine();
     const alice = engine.addPlayer('Alice');
     engine.startGame();
     engine.lockCurrentQuestion();
     engine.enterCorrection();
-    engine.nextQuestion(); // → q2 (choice, multiple)
+    engine.nextQuestion(); // → q2
 
     const partial = engine.submitAnswer(alice.id, ['Emma']);
     expect(partial.isCorrect).toBe(false);
   });
 
   it('accepte quand toutes les bonnes options sont cochées et aucune mauvaise', () => {
-    const engine = new GameEngine(buildQuiz());
+    const engine = createEngine();
     const alice = engine.addPlayer('Alice');
     engine.startGame();
     engine.lockCurrentQuestion();
@@ -144,7 +149,7 @@ describe('GameEngine — validation manuelle (text)', () => {
   }
 
   it("n'attribue aucun point tant que l'animateur n'a pas validé", () => {
-    const engine = new GameEngine(buildQuiz());
+    const engine = createEngine();
     const alice = engine.addPlayer('Alice');
     toQuestion3(engine);
 
@@ -154,7 +159,7 @@ describe('GameEngine — validation manuelle (text)', () => {
   });
 
   it("empêche de passer à la suite tant qu'une réponse manuelle est en attente", () => {
-    const engine = new GameEngine(buildQuiz());
+    const engine = createEngine();
     const alice = engine.addPlayer('Alice');
     toQuestion3(engine);
     engine.submitAnswer(alice.id, 'Léa');
@@ -165,7 +170,7 @@ describe('GameEngine — validation manuelle (text)', () => {
   });
 
   it("valide individuellement chaque joueur et ajuste le score si l'animateur change d'avis", () => {
-    const engine = new GameEngine(buildQuiz());
+    const engine = createEngine();
     const alice = engine.addPlayer('Alice');
     toQuestion3(engine);
     engine.submitAnswer(alice.id, 'Léa');
@@ -182,7 +187,7 @@ describe('GameEngine — validation manuelle (text)', () => {
 
 describe('GameEngine — joueur qui rejoint en retard', () => {
   it('est accepté avec un score de départ à 0', () => {
-    const engine = new GameEngine(buildQuiz());
+    const engine = createEngine();
     const alice = engine.addPlayer('Alice');
     engine.startGame();
     engine.submitAnswer(alice.id, true);
@@ -195,7 +200,7 @@ describe('GameEngine — joueur qui rejoint en retard', () => {
 
 describe('GameEngine — équipes', () => {
   it('cumule les points au niveau équipe quand un joueur marque', () => {
-    const engine = new GameEngine(buildQuiz({ teamsEnabled: true }));
+    const engine = createEngine({ teamsEnabled: true });
     const teamA = engine.addTeam('Équipe A');
     const alice = engine.addPlayer('Alice', teamA.id);
     engine.startGame();
@@ -206,26 +211,28 @@ describe('GameEngine — équipes', () => {
 });
 
 describe('GameEngine — découplage média/réponse', () => {
-  it("accepte une question avec un média image et une réponse de type choice", () => {
-    const quiz = buildQuiz({
-      questions: [
-        {
-          id: 'q1',
-          title: 'Qui est ce bébé ?',
-          points: 2,
-          media: { type: 'image', source: './images/bebe.jpg' },
-          answer: {
-            mode: 'choice',
-            multiple: false,
-            options: [
-              { text: 'Papa', correct: true },
-              { text: 'Maman', correct: false },
-            ],
-          },
-        },
-      ],
-    });
-    const engine = new GameEngine(quiz);
+  it('accepte une question avec un média image et une réponse de type choice', () => {
+    const engine = new GameEngine(
+        buildQuiz({
+          questions: [
+            {
+              id: 'q1',
+              title: 'Qui est ce bébé ?',
+              points: 2,
+              media: { type: 'image', url: 'https://example.com/bebe.jpg' },
+              answer: {
+                mode: 'choice',
+                multiple: false,
+                options: [
+                  { text: 'Papa', correct: true },
+                  { text: 'Maman', correct: false },
+                ],
+              },
+            },
+          ],
+        }),
+        MAX_PLAYERS,
+    );
     const alice = engine.addPlayer('Alice');
     engine.startGame();
 

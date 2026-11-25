@@ -27,8 +27,6 @@ export interface QuizSettings {
 export interface Quiz {
   title: string;
   description?: string;
-  theme?: string;
-  settings: QuizSettings;
   teamsEnabled: boolean;
   questions: Question[];
 }
@@ -38,13 +36,9 @@ export interface Quiz {
 export type MediaKind = 'image' | 'audio' | 'youtube';
 
 export interface MediaRef {
-  type: MediaKind;
-  /** chemin relatif à packages/server/quizzes/, requis pour type: image | audio */
-  source?: string;
-  /** requis pour type: youtube */
-  url?: string;
-  /** informatif — indique où couper l'extrait, en secondes */
-  clip?: { start: number; duration: number };
+  type: 'image' | 'audio' | 'youtube';
+  url: string;
+  clip?: { start: number };
 }
 
 // --- Format de réponse (un des 4 modes, indépendant du média) ---
@@ -88,6 +82,7 @@ export interface Question {
   id: string;
   title: string;
   points: number;
+  timeLimit?: number;
   media?: MediaRef;
   answer: AnswerSpec;
 }
