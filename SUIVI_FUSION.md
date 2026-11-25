@@ -63,3 +63,11 @@ Phase 1 - Copie du moteur et adaptation CJS
 ### Réinitialisation de la base
 - Volume supprimé, base renommée `quizz`, `.env` aligné (`POSTGRES_DB` et `DATABASE_URL`). Démarrage vérifié.
 - Problème rencontré : `DATABASE_URL` désalignée (erreur P1000 sur le rôle `resto`), corrigée.
+
+## Phase 1 — Copie du moteur et adaptation CJS (en cours)
+
+### Phase 1 - Étape 3 : retrait de parseQuizFile
+- Statut : réalisée. `node:fs` et `parseQuizFile` retirés de `quiz-engine/parser/index.ts`.
+- Build Docker vérifié : API et web compilent, l'API démarre.
+- Build local : prérequis `shared` compilé et `prisma generate` lancés à la main (environnement).
+- Note : fins de ligne CRLF détectées, à normaliser avec `.gitattributes`.
