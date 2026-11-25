@@ -45,7 +45,7 @@ describe('GameEngine — cycle de vie et scoring de base', () => {
 
   beforeEach(() => {
     engine = createEngine();
-    alice = engine.addPlayer('Alice');
+    alice = engine.addPlayer(1, 'Alice');
   });
 
   it("démarre en lobby et n'accepte pas les réponses avant startGame", () => {
@@ -55,9 +55,9 @@ describe('GameEngine — cycle de vie et scoring de base', () => {
   });
 
   it('refuse de dépasser la limite de joueurs passée au constructeur', () => {
-    engine.addPlayer('Bob');
-    engine.addPlayer('Charlie');
-    expect(() => engine.addPlayer('Dave')).toThrow(GameEngineError);
+    engine.addPlayer(2, 'Bob');
+    engine.addPlayer(3, 'Charlie');
+    expect(() => engine.addPlayer(4, 'Dave')).toThrow(GameEngineError);
   });
 
   it('score correctement une réponse boolean', () => {
@@ -80,7 +80,7 @@ describe('GameEngine — cycle de vie et scoring de base', () => {
     engine.lockCurrentQuestion();
     expect(engine.getSnapshot().state).toBe('question_locked');
 
-    const bob = engine.addPlayer('Bob');
+    const bob = engine.addPlayer(2, 'Bob');
     expect(engine.submitAnswer(bob.id, true).accepted).toBe(false);
 
     engine.enterCorrection();
@@ -113,7 +113,7 @@ describe('GameEngine — cycle de vie et scoring de base', () => {
 describe('GameEngine — choix multiple', () => {
   it("valide uniquement si l'ensemble sélectionné correspond exactement aux bonnes réponses", () => {
     const engine = createEngine();
-    const alice = engine.addPlayer('Alice');
+    const alice = engine.addPlayer(1, 'Alice');
     engine.startGame();
     engine.lockCurrentQuestion();
     engine.enterCorrection();
@@ -125,7 +125,7 @@ describe('GameEngine — choix multiple', () => {
 
   it('accepte quand toutes les bonnes options sont cochées et aucune mauvaise', () => {
     const engine = createEngine();
-    const alice = engine.addPlayer('Alice');
+    const alice = engine.addPlayer(1, 'Alice');
     engine.startGame();
     engine.lockCurrentQuestion();
     engine.enterCorrection();
@@ -150,7 +150,7 @@ describe('GameEngine — validation manuelle (text)', () => {
 
   it("n'attribue aucun point tant que l'animateur n'a pas validé", () => {
     const engine = createEngine();
-    const alice = engine.addPlayer('Alice');
+    const alice = engine.addPlayer(1, 'Alice');
     toQuestion3(engine);
 
     const result = engine.submitAnswer(alice.id, 'Léa');
@@ -160,7 +160,7 @@ describe('GameEngine — validation manuelle (text)', () => {
 
   it("empêche de passer à la suite tant qu'une réponse manuelle est en attente", () => {
     const engine = createEngine();
-    const alice = engine.addPlayer('Alice');
+    const alice = engine.addPlayer(1, 'Alice');
     toQuestion3(engine);
     engine.submitAnswer(alice.id, 'Léa');
     engine.lockCurrentQuestion();
@@ -171,7 +171,7 @@ describe('GameEngine — validation manuelle (text)', () => {
 
   it("valide individuellement chaque joueur et ajuste le score si l'animateur change d'avis", () => {
     const engine = createEngine();
-    const alice = engine.addPlayer('Alice');
+    const alice = engine.addPlayer(1, 'Alice');
     toQuestion3(engine);
     engine.submitAnswer(alice.id, 'Léa');
     engine.lockCurrentQuestion();
@@ -188,11 +188,11 @@ describe('GameEngine — validation manuelle (text)', () => {
 describe('GameEngine — joueur qui rejoint en retard', () => {
   it('est accepté avec un score de départ à 0', () => {
     const engine = createEngine();
-    const alice = engine.addPlayer('Alice');
+    const alice = engine.addPlayer(1, 'Alice');
     engine.startGame();
     engine.submitAnswer(alice.id, true);
 
-    const bob = engine.addPlayer('Bob');
+    const bob = engine.addPlayer(2, 'Bob');
     expect(bob.score).toBe(0);
     expect(engine.getSnapshot().players).toHaveLength(2);
   });
@@ -202,7 +202,7 @@ describe('GameEngine — équipes', () => {
   it('cumule les points au niveau équipe quand un joueur marque', () => {
     const engine = createEngine({ teamsEnabled: true });
     const teamA = engine.addTeam('Équipe A');
-    const alice = engine.addPlayer('Alice', teamA.id);
+    const alice = engine.addPlayer(1, 'Alice', teamA.id);
     engine.startGame();
     engine.submitAnswer(alice.id, true);
 
@@ -233,7 +233,7 @@ describe('GameEngine — découplage média/réponse', () => {
         }),
         MAX_PLAYERS,
     );
-    const alice = engine.addPlayer('Alice');
+    const alice = engine.addPlayer(1, 'Alice');
     engine.startGame();
 
     const result = engine.submitAnswer(alice.id, ['Papa']);

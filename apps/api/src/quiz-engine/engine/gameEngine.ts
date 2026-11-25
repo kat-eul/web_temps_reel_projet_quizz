@@ -30,7 +30,7 @@ export class GameEngine {
 
   // --- Joueurs & équipes ---
 
-  addPlayer(nickname: string, teamId?: string): Player {
+  addPlayer(userId: number, nickname: string, teamId?: string): Player {
     if (this.state === 'finished') {
       throw new GameEngineError('La partie est terminée, impossible de rejoindre.');
     }
@@ -45,7 +45,7 @@ export class GameEngine {
     // est accepté avec un score de départ à 0 — il n'a simplement pas de
     // réponses enregistrées sur les questions déjà jouées.
     const player: Player = {
-      id: randomUUID(),
+      id: String(userId),
       nickname,
       teamId: this.quiz.teamsEnabled ? teamId : undefined,
       score: 0,
