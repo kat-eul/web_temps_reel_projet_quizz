@@ -1,7 +1,7 @@
 # Suivi de la fusion
 
 ## Phase actuelle
-Phase 5 - Host et permissions (à démarrer)
+Phase 5 - Host et permissions (en cours, étape 0 : préparation)
 
 ## Étapes de la roadmap
 - [x] Phase 0 — Nettoyage préalable
@@ -27,6 +27,65 @@ Phase 5 - Host et permissions (à démarrer)
 - Médias `image` et `audio` : URL `https://` obligatoire, `source` supprimé.
 - Limite de taille du YAML : 32 Ko, vérifiée en octets avant le parsing.
 - Fichiers `bebe_animaux.quiz.yml` et `comptines.quiz.yml` : n'existaient pas dans le dépôt, rien à supprimer.
+
+## Décisions prises en Phase 5
+
+**Permissions**
+- Seul `Room.ownerId` pilote la partie. Chaque `room:*` de pilotage vérifie `room.ownerId === userId` dans le service, avant tout appel au moteur.
+- Un joueur ne répond que pendant `question_active`, une seule fois par question.
+- L'host n'est jamais joueur. `addPlayer` ne reçoit que des `userId` de membres.
+- Identifiant du joueur dans le moteur = `userId`.
+- Convention d'événements `room:*` conservée (pas de `host:*`).
+
+**Visibilité**
+- Les bonnes réponses ne sont jamais envoyées pendant `question_active`. Elles apparaissent en `correction`.
+- Le classement final n'est diffusé qu'aux joueurs connectés.
+
+**Verrouillage**
+- Automatique dès que tous les joueurs connectés ont répondu, ou immédiatement s'il n'y a personne de connecté (host compris).
+- Pas de timer par question (`time_limit`) en Phase 5.
+
+**Déconnexion de l'host**
+- Compte à rebours de 2 minutes, démarré à la fermeture du dernier socket de l'owner (pas d'un seul onglet).
+- Pendant le délai : si une question est active, elle est verrouillée. Les joueurs voient « en attente du retour de l'host ».
+- Retour dans le délai : compte à rebours annulé, partie reprise à l'étape courante. Une question manuelle en attente reste à juger.
+- Retour détecté par une connexion socket authentifiée dont `userId === ownerId`.
+- Expiration, question manuelle non jugée en cours : elle compte comme incorrecte, la partie s'arrête à cette question (les suivantes ne sont pas jouées ni évaluées). `Room.state` passe à `FINISHED`, le moteur est libéré, le classement final part aux seuls joueurs connectés.
+- Expiration dans le lobby : suppression de la salle, membres renvoyés à l'accueil.
+- Une question manuelle déjà jugée garde son verdict. Seule la dernière sans verdict compte comme incorrecte.
+
+## Plan de la Phase 5
+
+- [ ] **Étape 1 — `GameService` (singleton)**
+    - `Map<roomId, GameEngine>` créée au `room:start`, libérée à `FINISHED`.
+    - Orchestre le moteur, sans logique de jeu hors du moteur.
+    - Gère les comptes à rebours de déconnexion de l'host, par salle.
+- [ ] **Étape 2 — Adaptation du moteur**
+    - `addPlayer(userId, nickname)` : identifiant = `userId`.
+    - Étapes figées pendant l'absence de l'host (lobby, verrouillée, correction), via état ou gestion côté service.
+    - Méthode de clôture à l'expiration : question manuelle non jugée → fausse, puis `finished`.
+    - `getSnapshot()` ne renvoie les bonnes réponses qu'en `correction` (aujourd'hui `currentQuestion` les contient en `question_active`).
+- [ ] **Étape 3 — Permissions côté serveur**
+    - `room:start`, `room:lock`, `room:correct`, `room:next`, `room:validate` : vérification `ownerId` avant le moteur.
+    - `room:answer` : membre de la salle, état `question_active`, pas de réponse précédente.
+- [ ] **Étape 4 — Présence de l'host**
+    - Compteur de sockets de l'owner par salle.
+    - Démarrage du délai à zéro socket, annulation au retour.
+    - Notification « en attente du retour de l'host » aux joueurs.
+- [ ] **Étape 5 — Verrouillage automatique**
+    - Après chaque réponse : verrouillage si tous les joueurs connectés ont répondu, ou s'il n'y a personne de connecté.
+- [ ] **Étape 6 — Fin de partie**
+    - Expiration en partie : `FINISHED`, moteur libéré, classement aux joueurs connectés.
+    - Expiration dans le lobby : suppression de la salle.
+- [ ] **Étape 7 — Tests**
+    - Un joueur qui envoie `room:lock` est refusé, l'état ne change pas.
+    - Pas de fuite des bonnes réponses dans le snapshot pendant `question_active`.
+    - Délai annulé au retour de l'host.
+    - Expiration avec question manuelle non jugée : fausse, partie arrêtée.
+
+## Points d'attention
+- **Chevauchement avec la Phase 7** : `leaveSocket` supprime aujourd'hui le `RoomParticipant` à la déconnexion. Il faut au minimum qu'un joueur déconnecté en cours de partie ne soit pas retiré de la base, pour le verrouillage automatique et le classement. Ce strict nécessaire est traité en Phase 5 ; le reste reste en Phase 7.
+- **Redémarrage** : la `Map` est en mémoire. Une salle `IN_PROGRESS` sans moteur après redémarrage doit passer à `FINISHED` au démarrage (prévu en Phase 7, à anticiper si la base reste incohérente).
 
 ## Modifications réalisées
 - Baseline : commit `d34c936` sur `fusion/quiz-engine` (suivi initial inclus).
@@ -74,5 +133,4 @@ Phase 5 - Host et permissions (à démarrer)
 
 ## Points restés ouverts
 - Limite du nombre de questions : proposition de 100, non tranchée.
-- Départ de l'host en cours de partie (roadmap §6, à traiter en Phase 5).
-- Délai de grâce à la déconnexion (Phase 7).
+- Délai de grâce à la déconnexion des joueurs (Phase 7).
