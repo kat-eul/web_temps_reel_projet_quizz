@@ -110,3 +110,7 @@ export interface Answer {
   isCorrect?: boolean;
   submittedAt: number;
 }
+
+export interface HostStatusPayload { connected: boolean }
+export interface RankingEntry { nickname: string; score: number }
+export interface GameEndedPayload { ranking: RankingEntry[] }

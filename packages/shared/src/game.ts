@@ -1,4 +1,4 @@
-import type { Player, Team, Question, Answer } from '../models/quiz.js';
+import type { Player, Team, Question, Answer } from './quiz';
 
 /**
  * États possibles d'une partie.

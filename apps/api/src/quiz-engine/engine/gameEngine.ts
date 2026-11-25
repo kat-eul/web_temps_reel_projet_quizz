@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Quiz, Player, Team, Answer, Question } from '../models/quiz.js';
-import type { GameState, GameSnapshot, SubmitAnswerResult } from './types.js';
+import type { Quiz, Player, Team, Answer, Question } from '@quizz/shared';
+import type { GameState, GameSnapshot, SubmitAnswerResult } from '@quizz/shared';
 import { evaluateAnswer, requiresManualValidation } from './scoring.js';
 
 export class GameEngineError extends Error {}

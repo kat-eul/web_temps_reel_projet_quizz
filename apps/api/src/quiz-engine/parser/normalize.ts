@@ -1,5 +1,5 @@
 import type { QuizFileInput, QuestionInput, AnswerInput } from './schema.js';
-import type { Quiz, Question, AnswerSpec, MediaRef } from '../models/quiz.js';
+import type { Quiz, Question, AnswerSpec, MediaRef } from '@quizz/shared';
 
 /**
  * Transforme la sortie validée par Zod (snake_case, ids optionnels) en

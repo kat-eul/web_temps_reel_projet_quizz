@@ -2,7 +2,7 @@ import yaml from 'js-yaml';
 import { quizFileSchema } from './schema.js';
 import { normalizeQuiz } from './normalize.js';
 import { QuizParseError, QuizYamlSyntaxError, formatZodError } from './errors.js';
-import type { Quiz } from '../models/quiz.js';
+import type { Quiz } from '@quizz/shared';
 
 export { QuizParseError, QuizYamlSyntaxError } from './errors.js';
 export * from './schema.js';

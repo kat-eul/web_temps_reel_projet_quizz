@@ -1,4 +1,4 @@
-import type { Question } from '../models/quiz.js';
+import type { Question } from '@quizz/shared';
 
 /**
  * Normalise une chaîne pour une comparaison insensible à la casse et aux

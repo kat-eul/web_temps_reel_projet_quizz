@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { GameEngine } from '../quiz-engine/engine/gameEngine';
-import type { Quiz } from '../quiz-engine/models/quiz';
+import type { Quiz } from '@quizz/shared';
 
 @Injectable()
 export class GameService {

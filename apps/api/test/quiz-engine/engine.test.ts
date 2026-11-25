@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Quiz } from '../../src/quiz-engine/models/quiz.js';
+import type { Quiz } from '@quizz/shared';
 import { GameEngine, GameEngineError } from '../../src/quiz-engine/engine/index.js';
 
 const MAX_PLAYERS = 3;
