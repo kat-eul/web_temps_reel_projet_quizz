@@ -56,7 +56,7 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
 
 ## Plan de la Phase 5
 
-- [ ] **Étape 1 — `GameService` (singleton)**
+- [x] **Étape 1 — `GameService` (singleton)**
     - `Map<roomId, GameEngine>` créée au `room:start`, libérée à `FINISHED`.
     - Orchestre le moteur, sans logique de jeu hors du moteur.
     - Gère les comptes à rebours de déconnexion de l'host, par salle.

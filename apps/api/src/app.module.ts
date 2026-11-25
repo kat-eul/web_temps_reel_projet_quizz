@@ -7,10 +7,11 @@ import { RoomController } from './room.controller';
 import { RoomService } from './room.service';
 import { RoomGateway } from './room.gateway';
 import { ChatService } from './chat.service';
+import { GameService } from './game/game.service';
 
 @Module({
   imports: [PrismaModule],
   controllers: [HealthController, AuthController, RoomController],
-  providers: [AuthService, RoomService, RoomGateway, ChatService],
+  providers: [AuthService, RoomService, RoomGateway, ChatService, GameService],
 })
 export class AppModule {}
