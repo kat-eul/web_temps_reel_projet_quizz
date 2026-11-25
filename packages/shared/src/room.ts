@@ -7,19 +7,15 @@ export const RoomSchema = z.object({
   name: z.string().trim().min(3).max(50),
   nbMaxParticipants: z.number().int().min(2).max(50),
   nbParticipants: z.number().int().min(0),
-  quizId: z.number().int().positive(),
   ownerId: z.number().int().positive(),
   state: RoomStateSchema,
-  currentQuestionId: z.number().int().positive().nullable(),
-  questionStartedAt: z.string().nullable(),
-  questionEndsAt: z.string().nullable(),
   createdAt: z.string().optional(),
 });
 
 export const CreateRoomSchema = z.object({
   name: z.string().trim().min(3).max(50),
   nbMaxParticipants: z.coerce.number().int().min(2).max(50),
-  quizId: z.coerce.number().int().positive(),
+  quizYaml: z.string().min(1, 'le quiz est obligatoire').max(32 * 1024, 'le quiz dépasse 32 Ko'),
 });
 
 export const RoomMembershipSchema = z.object({

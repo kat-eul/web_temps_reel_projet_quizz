@@ -6,7 +6,7 @@
           <p class="eyebrow">Accueil</p>
           <h1>Les salles disponibles</h1>
         </div>
-        <button class="primary" @click="isModalOpen = true">Créer une salle</button>
+        <button class="primary" @click="openModal()">Créer une salle</button>
       </div>
 
       <div v-if="error" class="error-box">{{ error }}</div>
@@ -33,12 +33,14 @@
       <p v-else class="empty-state">Aucune salle pour le moment.</p>
     </section>
 
-    <div v-if="isModalOpen" class="modal-backdrop" @click.self="isModalOpen = false">
+    <div v-if="isModalOpen" class="modal-backdrop" @click.self="closeModal()">
       <div class="modal">
         <div class="modal-header">
           <h2>Créer une salle</h2>
-          <button class="ghost" type="button" @click="isModalOpen = false">Fermer</button>
+          <button class="ghost" type="button" @click="closeModal()">Fermer</button>
         </div>
+
+        <p v-if="modalError" class="modal-error">{{ modalError }}</p>
 
         <form @submit.prevent="submitCreateRoom" class="room-form">
           <label>
@@ -52,16 +54,12 @@
           </label>
 
           <label>
-            <span>Quiz</span>
-            <select v-model="form.quizId" required>
-              <option v-for="quiz in quizzes" :key="quiz.id" :value="quiz.id">
-                {{ quiz.title }}
-              </option>
-            </select>
+            <span>Quiz (YAML)</span>
+            <textarea v-model="form.quizYaml" rows="12" required placeholder="quiz:&#10;  title: Mon quiz&#10;questions:&#10;  - title: ..."></textarea>
           </label>
 
           <div class="actions">
-            <button type="button" class="secondary" @click="isModalOpen = false">Annuler</button>
+            <button type="button" class="secondary" @click="closeModal()">Annuler</button>
             <button type="submit" class="primary" :disabled="loading">
               {{ loading ? 'Création...' : 'Valider' }}
             </button>
@@ -174,6 +172,20 @@ h1 {
   border: 1px solid #fecaca;
   padding: 0.75rem 1rem;
   border-radius: 10px;
+  white-space: pre-line;
+}
+
+.modal-error {
+  margin: 0;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  white-space: pre-line;
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .modal-backdrop {
@@ -242,13 +254,11 @@ button:disabled {
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { listQuizzes } from '../services/quiz';
-import { createRoom, joinRoom, listRooms, pollRooms } from '../services/room';
-import type { Quiz, Room } from '@quizz/shared';
+import { ApiValidationError, createRoom, joinRoom, listRooms, pollRooms } from '../services/room';
+import type { Room } from '@quizz/shared';
 
 const router = useRouter();
 const rooms = ref<Room[]>([]);
-const quizzes = ref<Quiz[]>([]);
 const loading = ref(false);
 const joiningRoomId = ref<number | null>(null);
 const error = ref('');
@@ -257,25 +267,21 @@ let roomsVersion = 0;
 let pollingController: AbortController | null = null;
 let polling = false;
 let active = true;
+const modalError = ref('');
+
 const form = reactive({
   name: '',
   nbMaxParticipants: 8,
-  quizId: 1,
+  quizYaml: '',
 });
 
 async function fetchData() {
   try {
-    const [quizzesList, roomsList] = await Promise.all([listQuizzes(), listRooms()]);
-    quizzes.value = quizzesList;
-    rooms.value = roomsList;
-    if (quizzesList.length && !form.quizId) {
-      form.quizId = quizzesList[0].id;
-    }
+    rooms.value = await listRooms();
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Impossible de charger les données.';
+    error.value = err instanceof Error ? err.message : 'Impossible de charger les salles.';
   }
 }
-
 async function startRoomPolling() {
   if (polling) return;
   polling = true;
@@ -303,18 +309,22 @@ async function startRoomPolling() {
 async function submitCreateRoom() {
   try {
     loading.value = true;
-    error.value = '';
+    modalError.value = '';
 
     const room = await createRoom({
       name: form.name,
       nbMaxParticipants: Number(form.nbMaxParticipants),
-      quizId: Number(form.quizId),
+      quizYaml: form.quizYaml,
     });
 
-    isModalOpen.value = false;
+    closeModal();
     await router.push({ name: 'room', params: { id: String(room.id) } });
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Impossible de créer la salle.';
+    if (err instanceof ApiValidationError) {
+      modalError.value = [err.message, ...err.issues].join('\n');
+    } else {
+      modalError.value = err instanceof Error ? err.message : 'Impossible de créer la salle.';
+    }
   } finally {
     loading.value = false;
   }
@@ -332,6 +342,16 @@ async function submitJoinRoom(roomId: number) {
   } finally {
     joiningRoomId.value = null;
   }
+}
+
+function openModal() {
+  modalError.value = '';
+  isModalOpen.value = true;
+}
+
+function closeModal() {
+  modalError.value = '';
+  isModalOpen.value = false;
 }
 
 onMounted(() => {

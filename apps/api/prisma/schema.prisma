@@ -13,43 +13,30 @@ enum UserRole {
 }
 
 model User {
-  id                Int               @id @default(autoincrement())
-  pseudo            String            @unique
-  email             String            @unique
-  password          String
-  role              UserRole          @default(USER)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id                 Int               @id @default(autoincrement())
+  pseudo             String            @unique
+  email              String            @unique
+  password           String
+  role               UserRole          @default(USER)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
   roomParticipations RoomParticipant[]
-  chatMessages      ChatMessage[]
-  ownedRooms        Room[]            @relation("RoomOwner")
-}
-
-model Quiz {
-  id        Int        @id @default(autoincrement())
-  title     String
-  createur  String
-  questions Question[]
-  rooms     Room[]
+  chatMessages       ChatMessage[]
+  ownedRooms         Room[]            @relation("RoomOwner")
 }
 
 model Room {
-  id              Int               @id @default(autoincrement())
-  name            String            @unique
+  id                Int               @id @default(autoincrement())
+  name              String            @unique
   nbMaxParticipants Int
-  nbParticipants  Int               @default(0)
-  quizId          Int
-  quiz            Quiz              @relation(fields: [quizId], references: [id])
-  ownerId         Int
-  owner           User              @relation("RoomOwner", fields: [ownerId], references: [id])
-  state           RoomState         @default(WAITING)
-  currentQuestionId Int?
-  currentQuestion Question?         @relation(fields: [currentQuestionId], references: [id])
-  questionStartedAt DateTime?
-  questionEndsAt  DateTime?
-  participants    RoomParticipant[]
-  chatMessages    ChatMessage[]
-  createdAt       DateTime          @default(now())
+  nbParticipants    Int               @default(0)
+  quizYaml          String            @db.Text
+  ownerId           Int
+  owner             User              @relation("RoomOwner", fields: [ownerId], references: [id])
+  state             RoomState         @default(WAITING)
+  participants      RoomParticipant[]
+  chatMessages      ChatMessage[]
+  createdAt         DateTime          @default(now())
 }
 
 enum RoomState {
@@ -79,21 +66,4 @@ model RoomParticipant {
 
   @@id([roomId, userId])
   @@index([userId])
-}
-
-model Question {
-  id       Int      @id @default(autoincrement())
-  question String
-  quizId   Int
-  quiz     Quiz     @relation(fields: [quizId], references: [id])
-  answers  Answer[]
-  rooms    Room[]
-}
-
-model Answer {
-  id         Int      @id @default(autoincrement())
-  enonce     String
-  isTrue     Boolean
-  questionId Int
-  question   Question @relation(fields: [questionId], references: [id])
 }
