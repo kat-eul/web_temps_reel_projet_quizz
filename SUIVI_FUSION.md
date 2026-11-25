@@ -1,7 +1,7 @@
 # Suivi de la fusion
 
 ## Phase actuelle
-Phase 5 - Host et permissions (code terminé, Vitest 45/45 ; scripts Node de parcours écrits mais à rejouer via Docker ; front F-1 à F-6 à rédiger)
+Phase 5 - Host et permissions (back terminé et validé : Vitest 45/45, scripts scenario/presence/expiry/disconnect verts ; front F-1 à F-6 à faire)
 
 ## Étapes de la roadmap
 - [x] Phase 0 — Nettoyage préalable
@@ -105,8 +105,8 @@ Phase 5 - Host et permissions (code terminé, Vitest 45/45 ; scripts Node de par
   - [x] Tests moteur : 45/45 (vérifié en relançant Vitest) — P-D.
   - [x] Délai annulé au retour de l'host, expiration du délai : `scripts/presence.mjs` (9 contrôles), exécuté, RAS — P-E.
   - [x] Expiration avec question manuelle non jugée : `scripts/expiry.mjs` (7 contrôles, score 0 pour la réponse non jugée), exécuté, RAS — P-F.
-  - [x] Verrouillage automatique à la déconnexion d'un joueur : `scripts/disconnect.mjs` exécuté après reconstruction de l'image API, 18/19 contrôles verts ; le 19e (`members`) est un défaut du script : `GET /api/rooms/:id` n'a pas de champ `members`, `nbParticipants: 3` prouve que Bob reste en base — P-A bis.
-  - [~] Vérification en base après fin de partie : `scenario.mjs` contrôle `FINISHED` (ou 404) via `GET /api/rooms/:id` ; contrôle à resserrer pour exiger `FINISHED` strictement — P-G.
+  - [x] Verrouillage automatique à la déconnexion d'un joueur : `scripts/disconnect.mjs` exécuté après reconstruction de l'image API, tous les contrôles verts (le contrôle `members` a été remplacé par `nbParticipants === 3`) — P-A bis.
+  - [x] Vérification en base après fin de partie : `scenario.mjs` (21 contrôles) et `presence.mjs` (9 contrôles) exigent `GET /api/rooms/:id` = 200 et `state === 'FINISHED'`, tous verts — P-G.
 
 ## Front (suivi parallèle)
 Prérequis constatés (branche `fusion/phase-5`, commit `d1fc8b8`) :
@@ -130,8 +130,8 @@ Prompts à rédiger :
 - [x] P-D — Tests garde-fous moteur (45/45, relancés)
 - [x] P-E — `presence.mjs` (9 contrôles, exécuté, RAS)
 - [x] P-F — `expiry.mjs` (7 contrôles, exécuté, RAS)
-- [ ] P-G — Vérification `FINISHED` en base : resserrer le contrôle de `scenario.mjs` (et `presence.mjs`) pour exiger `FINISHED`, puis rejouer
-- [x] P-A bis — Test de parcours du verrouillage à la déconnexion d'un joueur (`scripts/disconnect.mjs`, comportement validé ; reste à remplacer le contrôle `members` par `nbParticipants === 3`)
+- [x] P-G — Vérification `FINISHED` stricte en base (`scenario.mjs` et `presence.mjs`, rejoués, verts)
+- [x] P-A bis — Test de parcours du verrouillage à la déconnexion d'un joueur (`scripts/disconnect.mjs`, tous contrôles verts)
 - [ ] F-1 à F-6 — Front (voir section Front)
 
 Ancien « Reste à traiter (Prompt 4) » : `room:answer` (erreurs de `submitAnswer` capturées) et `room:start` (moteur, joueurs, snapshot) sont faits.
@@ -189,5 +189,5 @@ Ancien « Reste à traiter (Prompt 4) » : `room:answer` (erreurs de `submitAnsw
 
 ## Points restés ouverts
 - Limite du nombre de questions : proposition de 100, non tranchée.
-- `scenario.mjs` à rejouer après le resserrement de P-G ; `presence.mjs` et `expiry.mjs` ont été exécutés (RAS).
+- Scripts de parcours tous rejoués et verts (`scenario`, `presence`, `expiry`, `disconnect`). À rejouer après toute modification du gateway, image reconstruite.
 - Délai de grâce à la déconnexion des joueurs (Phase 7).

@@ -153,7 +153,8 @@ async function main() {
     check(!after.json.some((r) => r.id === roomId), 'salle non listée après fin');
 
     const detail = await api(`/rooms/${roomId}`);
-    check(detail.status === 404 || detail.json.state === 'FINISHED', 'salle FINISHED ou supprimée en base', detail.json);
+    check(detail.status === 200, 'la salle existe toujours en base après la fin', detail);
+    check(detail.json.state === 'FINISHED', 'Room.state vaut FINISHED en base', detail.json);
 
     [O, A, B].forEach((c) => c.socket.disconnect());
 }

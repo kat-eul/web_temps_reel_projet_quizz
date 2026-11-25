@@ -134,13 +134,8 @@ async function main() {
 
         check(A.events.ended.length === 1, 'Alice reçoit exactement un game:ended', A.events.ended);
         const room = await api(`/rooms/${roomId}`);
-        const removed = room.status === 404;
-        const finished = room.json.state === 'FINISHED';
-        check(
-            removed || finished,
-            removed ? 'salle supprimée (404)' : finished ? 'salle conservée (FINISHED)' : 'salle supprimée ou terminée',
-            room,
-        );
+        check(room.status === 200, 'la salle existe toujours en base après la fin', room);
+        check(room.json.state === 'FINISHED', 'Room.state vaut FINISHED en base', room.json);
     } finally {
         [O, A, B].filter(Boolean).forEach((client) => client.socket.disconnect());
     }
