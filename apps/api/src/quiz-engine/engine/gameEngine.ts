@@ -210,6 +210,15 @@ export class GameEngine {
     return [...questionAnswers.values()].some((a) => a.isCorrect === undefined);
   }
 
+  /** true si la question active doit se verrouiller : tous les joueurs connectés ont répondu, ou aucun joueur n'est connecté. */
+  shouldAutoLock(): boolean {
+    if (this.state !== 'question_active') return false;
+    const connected = [...this.players.values()].filter((p) => p.connected);
+    if (connected.length === 0) return true;
+    const answered = this.answersFor(this.currentQuestion.id);
+    return connected.every((p) => answered.has(p.id));
+  }
+
   closeOnExpiry(): void {
     if (this.state === 'lobby' || this.state === 'finished') {
       throw new GameEngineError(`Clôture impossible depuis l'état '${this.state}'.`);

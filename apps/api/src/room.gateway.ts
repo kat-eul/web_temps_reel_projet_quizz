@@ -293,6 +293,13 @@ export class RoomGateway implements OnGatewayDisconnect {
       return { accepted: false, reason: message };
     }
     if (answerResult.accepted) {
+      if (engine.shouldAutoLock()) {
+        try {
+          engine.lockCurrentQuestion();
+        } catch {
+          // La question a déjà changé d'état : rien à faire.
+        }
+      }
       this.broadcastSnapshot(result.data.roomId);
     }
     const state = engine.getSnapshot().state;

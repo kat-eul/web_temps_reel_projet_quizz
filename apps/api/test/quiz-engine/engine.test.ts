@@ -307,6 +307,45 @@ describe('GameEngine — snapshot et clôture', () => {
     });
   });
 
+  describe('GameEngine — verrouillage automatique', () => {
+    it('ne se verrouille pas si un joueur connecté n\'a pas encore répondu', () => {
+      const engine = new GameEngine(buildQuiz(), 5);
+      const alice = engine.addPlayer(1, 'Alice');
+      engine.addPlayer(2, 'Bob');
+      engine.startGame();
+      engine.submitAnswer(alice.id, true);
+      expect(engine.shouldAutoLock()).toBe(false);
+    });
+
+    it('se verrouille quand tous les joueurs connectés ont répondu', () => {
+      const engine = new GameEngine(buildQuiz(), 5);
+      const alice = engine.addPlayer(1, 'Alice');
+      const bob = engine.addPlayer(2, 'Bob');
+      engine.startGame();
+      engine.submitAnswer(alice.id, true);
+      engine.submitAnswer(bob.id, true);
+      expect(engine.shouldAutoLock()).toBe(true);
+    });
+
+    it('se verrouille quand aucun joueur n\'est connecté', () => {
+      const engine = new GameEngine(buildQuiz(), 5);
+      const alice = engine.addPlayer(1, 'Alice');
+      engine.startGame();
+      engine.setPlayerConnected(alice.id, false);
+      expect(engine.shouldAutoLock()).toBe(true);
+    });
+
+    it('un joueur déconnecté qui n\'a pas répondu ne bloque pas le verrouillage', () => {
+      const engine = new GameEngine(buildQuiz(), 5);
+      const alice = engine.addPlayer(1, 'Alice');
+      const bob = engine.addPlayer(2, 'Bob');
+      engine.startGame();
+      engine.setPlayerConnected(bob.id, false);
+      engine.submitAnswer(alice.id, true);
+      expect(engine.shouldAutoLock()).toBe(true);
+    });
+  });
+
   it('marque faux les réponses manuelles en attente à la clôture sans changer le score', () => {
     const engine = createEngine({
       questions: [{ id: 'manual', title: 'Réponse manuelle', points: 3, answer: { mode: 'text', correction: 'manual' } }],
