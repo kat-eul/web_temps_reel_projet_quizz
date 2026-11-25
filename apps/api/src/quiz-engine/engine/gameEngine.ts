@@ -210,10 +210,29 @@ export class GameEngine {
     return [...questionAnswers.values()].some((a) => a.isCorrect === undefined);
   }
 
+  closeOnExpiry(): void {
+    if (this.state === 'lobby' || this.state === 'finished') {
+      throw new GameEngineError(`Clôture impossible depuis l'état '${this.state}'.`);
+    }
+    const question = this.currentQuestion;
+    if (requiresManualValidation(question)) {
+      for (const answer of this.answersFor(question.id).values()) {
+        if (answer.isCorrect === undefined) answer.isCorrect = false;
+      }
+    }
+    this.state = 'finished';
+  }
+
   // --- Lecture d'état ---
 
   get currentQuestion(): Question {
     return this.quiz.questions[this.currentQuestionIndex];
+  }
+
+  private exposedQuestion(): Question {
+    return this.state === 'correction' || this.state === 'finished'
+      ? this.currentQuestion
+      : maskQuestion(this.currentQuestion);
   }
 
   getLeaderboard(): Player[] {
@@ -231,7 +250,7 @@ export class GameEngine {
       totalQuestions: this.quiz.questions.length,
       teamsEnabled: this.quiz.teamsEnabled,
       currentQuestionIndex: this.currentQuestionIndex,
-      currentQuestion: this.state === 'lobby' ? null : this.currentQuestion,
+      currentQuestion: this.state === 'lobby' ? null : this.exposedQuestion(),
       players: [...this.players.values()],
       teams: [...this.teams.values()],
       currentQuestionAnswers: this.getCurrentQuestionAnswers(),
@@ -271,4 +290,26 @@ export class GameEngine {
       );
     }
   }
+}
+
+function maskQuestion(question: Question): Question {
+  const maskedQuestion = structuredClone(question);
+  switch (maskedQuestion.answer.mode) {
+    case 'choice':
+      for (const option of maskedQuestion.answer.options) {
+        option.correct = false;
+      }
+      break;
+    case 'boolean':
+      (maskedQuestion.answer as { value?: boolean }).value = undefined;
+      break;
+    case 'text':
+      maskedQuestion.answer.accepted = undefined;
+      break;
+    case 'number':
+      (maskedQuestion.answer as { value?: number; tolerance?: number }).value = undefined;
+      (maskedQuestion.answer as { value?: number; tolerance?: number }).tolerance = undefined;
+      break;
+  }
+  return maskedQuestion;
 }

@@ -240,3 +240,86 @@ describe('GameEngine — découplage média/réponse', () => {
     expect(result.isCorrect).toBe(true);
   });
 });
+
+describe('GameEngine — snapshot et clôture', () => {
+  it('masque les réponses des questions choice et text automatique pendant question_active', () => {
+    const quiz = buildQuiz({
+      questions: [
+        {
+          id: 'choice',
+          title: 'Choix',
+          points: 1,
+          answer: {
+            mode: 'choice',
+            multiple: false,
+            options: [
+              { text: 'Bonne réponse', correct: true },
+              { text: 'Mauvaise réponse', correct: false },
+            ],
+          },
+        },
+        {
+          id: 'text',
+          title: 'Réponse texte',
+          points: 1,
+          answer: { mode: 'text', correction: 'automatic', accepted: ['Réponse secrète'] },
+        },
+      ],
+    });
+    const engine = new GameEngine(quiz, MAX_PLAYERS);
+
+    engine.startGame();
+    const choiceSnapshot = engine.getSnapshot();
+    expect(choiceSnapshot.state).toBe('question_active');
+    expect(choiceSnapshot.currentQuestion?.answer).toMatchObject({
+      mode: 'choice',
+      options: [
+        { text: 'Bonne réponse', correct: false },
+        { text: 'Mauvaise réponse', correct: false },
+      ],
+    });
+    expect(JSON.stringify(choiceSnapshot)).not.toContain('"correct":true');
+    expect(JSON.stringify(choiceSnapshot)).not.toContain('"accepted"');
+
+    engine.lockCurrentQuestion();
+    engine.enterCorrection();
+    engine.nextQuestion();
+
+    const textSnapshot = engine.getSnapshot();
+    expect(textSnapshot.state).toBe('question_active');
+    expect(textSnapshot.currentQuestion?.answer).toMatchObject({
+      mode: 'text',
+      correction: 'automatic',
+    });
+    expect((textSnapshot.currentQuestion?.answer as { accepted?: string[] }).accepted).toBeUndefined();
+    expect(JSON.stringify(textSnapshot)).not.toContain('"correct":true');
+    expect(JSON.stringify(textSnapshot)).not.toContain('"accepted"');
+    expect(quiz.questions[0].answer).toMatchObject({
+      mode: 'choice',
+      options: [
+        { text: 'Bonne réponse', correct: true },
+        { text: 'Mauvaise réponse', correct: false },
+      ],
+    });
+    expect(quiz.questions[1].answer).toMatchObject({
+      mode: 'text',
+      accepted: ['Réponse secrète'],
+    });
+  });
+
+  it('marque faux les réponses manuelles en attente à la clôture sans changer le score', () => {
+    const engine = createEngine({
+      questions: [{ id: 'manual', title: 'Réponse manuelle', points: 3, answer: { mode: 'text', correction: 'manual' } }],
+    });
+    const alice = engine.addPlayer(1, 'Alice');
+    engine.startGame();
+    engine.submitAnswer(alice.id, 'Réponse');
+
+    expect(engine.getLeaderboard()[0].score).toBe(0);
+    engine.closeOnExpiry();
+
+    expect(engine.getSnapshot().state).toBe('finished');
+    expect(engine.getSnapshot().currentQuestionAnswers[0].isCorrect).toBe(false);
+    expect(engine.getLeaderboard()[0].score).toBe(0);
+  });
+});
