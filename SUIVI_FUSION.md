@@ -64,7 +64,13 @@ Phase 1 - Copie du moteur et adaptation CJS
 - Volume supprimé, base renommée `quizz`, `.env` aligné (`POSTGRES_DB` et `DATABASE_URL`). Démarrage vérifié.
 - Problème rencontré : `DATABASE_URL` désalignée (erreur P1000 sur le rôle `resto`), corrigée.
 
-## Phase 1 — Copie du moteur et adaptation CJS (en cours)
+## Phase 1 — Copie du moteur et adaptation CJS : terminée
+- Moteur copié dans `apps/api/src/quiz-engine/` ; `parseQuizFile` et `node:fs` retirés.
+- Tests portés dans `apps/api/test/quiz-engine/` : 31 verts (`npm test -w @quizz/api`).
+- Build Docker vérifié, API démarre avec `quizz` comme base.
+- Dépendances ajoutées : `js-yaml`, `@types/js-yaml`, `vitest` (v5.1.1, à vérifier avec Vite 6 de `apps/web`, build web OK).
+- Reporté : test unitaire de `verifyToken` ; upgrade WebSocket (polling observé) ; `.gitattributes` pour normaliser les fins de ligne CRLF ; `projet.iml` et `.github/` à traiter.
+- Fixtures : `gender-reveal` au format courant ; `invalid` à revoir en Phase 2 ; `examples/` en ancien format, à unifier en Phase 2.
 
 ### Phase 1 - Étape 3 : retrait de parseQuizFile (terminée)
 - Statut : réalisée. `node:fs` et `parseQuizFile` retirés de `quiz-engine/parser/index.ts`.
