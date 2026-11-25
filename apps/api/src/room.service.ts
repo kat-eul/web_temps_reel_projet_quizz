@@ -12,6 +12,9 @@ export class RoomService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit(): Promise<void> {
+    // au démarrage aucun socket n'est connecté
+    await this.prisma.room.updateMany({ where: { state: 'IN_PROGRESS' }, data: { state: 'FINISHED' } });
+    await this.prisma.roomParticipant.deleteMany({ where: { room: { state: 'WAITING' } } });
     await this.deleteEmptyRooms();
   }
 
@@ -132,7 +135,7 @@ export class RoomService implements OnModuleInit {
       }
 
       const otherMembership = await tx.roomParticipant.findFirst({
-        where: { userId, roomId: { not: roomId } },
+        where: { userId, roomId: { not: roomId }, room: { state: { not: 'FINISHED' } } },
         include: { room: true },
       });
       if (otherMembership) {

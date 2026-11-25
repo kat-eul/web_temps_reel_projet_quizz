@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import type { ChatMessage, Room } from '@quizz/shared';
 import { io, type Socket } from 'socket.io-client';
@@ -9,12 +9,23 @@ import { useRoomGame } from '../composables/useRoomGame';
 const route = useRoute();
 const room = ref<Room | null>(null);
 const socket = ref<Socket | null>(null);
+const currentUser = getStoredSession();
 const { snapshot, hostConnected, ended, leaderboard } = useRoomGame(socket);
 const messages = ref<ChatMessage[]>([]);
 const draft = ref('');
 const chatError = ref('');
 const connectionError = ref('');
 const chatScroll = ref<HTMLElement | null>(null);
+const starting = ref(false);
+const startError = ref('');
+const isOwner = computed(() => !!room.value && room.value.ownerId === currentUser?.user?.id);
+const canStart = computed(
+  () =>
+    isOwner.value &&
+    !snapshot.value &&
+    room.value?.state === 'WAITING' &&
+    (room.value?.nbParticipants ?? 0) >= 2,
+);
 
 onMounted(async () => {
   const roomId = Number(route.params.id);
@@ -114,6 +125,20 @@ function sendMessage() {
     },
   );
 }
+
+function startGame() {
+  if (!socket.value || !room.value || starting.value) return;
+  starting.value = true;
+  startError.value = '';
+  socket.value.emit(
+    'room:start',
+    { roomId: room.value.id },
+    (res: { ok: boolean; error?: string }) => {
+      starting.value = false;
+      if (!res.ok) startError.value = res.error ?? 'Impossible de lancer la partie.';
+    },
+  );
+}
 </script>
 
 <template>
@@ -121,8 +146,18 @@ function sendMessage() {
     <section class="room-card" v-if="room">
       <p class="eyebrow">Salle créée</p>
       <h1>{{ room.name }}</h1>
-      <p>Participants : {{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</p>
+      <p>Joueurs : {{ Math.max(room.nbParticipants - 1, 0) }} / {{ room.nbMaxParticipants - 1 }}</p>
       <p v-if="snapshot">[debug F-1] État : {{ snapshot.state }} — host : {{ hostConnected }} — fin : {{ ended ? 'oui' : 'non' }} — joueurs : {{ leaderboard.length }}</p>
+      <div v-if="isOwner && !snapshot" class="start-actions">
+        <button class="start-button" type="button" :disabled="!canStart || starting" @click="startGame">
+          Lancer la partie
+        </button>
+        <p v-if="room.nbParticipants < 2" class="start-hint">
+          Au moins un joueur doit avoir rejoint la salle.
+        </p>
+        <p v-if="startError" class="start-error" role="alert">{{ startError }}</p>
+      </div>
+      <p v-else-if="!isOwner && !snapshot">En attente du lancement par l'animateur.</p>
       <section class="chat" aria-label="Tchat de la salle">
         <header class="chat-header">
           <h2>Tchat</h2>

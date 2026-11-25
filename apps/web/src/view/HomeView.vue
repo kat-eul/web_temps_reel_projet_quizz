@@ -18,7 +18,7 @@
             <p>Propriétaire : {{ room.ownerId }}</p>
           </div>
           <div class="room-card-actions">
-            <span>{{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</span>
+            <span>{{ Math.max(room.nbParticipants - 1, 0) }} / {{ room.nbMaxParticipants - 1 }} joueurs</span>
             <button
               class="primary"
               type="button"
@@ -49,8 +49,8 @@
           </label>
 
           <label>
-            <span>Nombre maximum de participants</span>
-            <input v-model="form.nbMaxParticipants" type="number" min="2" max="50" required />
+            <span>Nombre maximum de joueurs (animateur exclu)</span>
+            <input v-model="form.nbMaxParticipants" type="number" min="1" max="49" required />
           </label>
 
           <label>
@@ -313,7 +313,7 @@ async function submitCreateRoom() {
 
     const room = await createRoom({
       name: form.name,
-      nbMaxParticipants: Number(form.nbMaxParticipants),
+      nbMaxParticipants: Number(form.nbMaxParticipants) + 1,
       quizYaml: form.quizYaml,
     });
 
