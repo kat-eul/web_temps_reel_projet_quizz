@@ -26,19 +26,10 @@ export const RoomStartSchema = z.object({
   roomId: z.coerce.number().int().positive(),
 });
 
-export const GameQuestionSchema = z.object({
-  id: z.number().int().positive(),
-  question: z.string(),
-  answers: z.array(z.object({
-    id: z.number().int().positive(),
-    enonce: z.string(),
-  })),
-});
 
 export const RoomStartedSchema = z.object({
   roomId: z.number().int().positive(),
   state: z.literal('IN_PROGRESS'),
-  question: GameQuestionSchema,
   questionStartedAt: z.string(),
   questionEndsAt: z.string(),
 });

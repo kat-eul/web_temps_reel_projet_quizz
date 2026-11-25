@@ -15,7 +15,7 @@
         <article v-for="room in rooms" :key="room.id" class="room-card">
           <div>
             <h2>{{ room.name }}</h2>
-            <p>Quiz n°{{ room.quizId }}</p>
+            <p>Propriétaire : {{ room.ownerId }}</p>
           </div>
           <div class="room-card-actions">
             <span>{{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</span>

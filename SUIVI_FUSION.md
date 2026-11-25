@@ -1,14 +1,14 @@
 # Suivi de la fusion
 
 ## Phase actuelle
-Phase 4 - Migration Prisma et association salle ↔ YAML (en cours : résidus à nettoyer)
+Phase 5 - Host et permissions (à démarrer)
 
 ## Étapes de la roadmap
 - [x] Phase 0 — Nettoyage préalable
 - [x] Phase 1 — Copie du moteur et adaptation CJS
 - [x] Phase 2 — Adaptation du schéma YAML
 - [x] Phase 3 — Validation du YAML à la création de salle
-- [ ] Phase 4 — Migration Prisma et association salle ↔ YAML (majoritairement faite)
+- [x] Phase 4 — Migration Prisma et association salle ↔ YAML
 - [ ] Phase 5 — Host et permissions
 - [ ] Phase 6 — Déroulement en temps réel
 - [ ] Phase 7 — Déconnexions, reconnexions, capacité
@@ -30,50 +30,49 @@ Phase 4 - Migration Prisma et association salle ↔ YAML (en cours : résidus à
 
 ## Modifications réalisées
 - Baseline : commit `d34c936` sur `fusion/quiz-engine` (suivi initial inclus).
+- Phase 1 : moteur copié dans `apps/api/src/quiz-engine/`, tests portés dans `apps/api/test/quiz-engine/`.
 - Phase 2 : `schema.ts`, `models/quiz.ts`, `normalize.ts`, `parser/index.ts` adaptés. Fixtures `gender-reveal` et `invalid` au format courant, dans `apps/api/test/fixtures/`.
-- Phase 3 : `CreateRoomSchema` reçoit `quizYaml`, `RoomService.create` valide le YAML via `parseQuizString`, et renvoie les erreurs dans `issues`. `HomeView.vue` affiche la liste des erreurs dans la modale (`ApiValidationError` dans `services/room.ts`).
-- Phase 4 (partielle) : modèles `Quiz`, `Question`, `Answer` supprimés de Prisma ; `Room` porte `quizYaml`. `QuizController`, `QuizListController`, `QuizService` et `seed-quiz.ts` supprimés.
+- Phase 3 : `CreateRoomSchema` reçoit `quizYaml`, `RoomService.create` valide le YAML via `parseQuizString` et renvoie les erreurs dans `issues`. `HomeView.vue` affiche les erreurs dans la modale (`ApiValidationError` dans `services/room.ts`).
+- Phase 4 : modèles `Quiz`, `Question`, `Answer` supprimés de Prisma ; `Room` porte `quizYaml`. `QuizController`, `QuizListController`, `QuizService`, `seed-quiz.ts`, `services/quiz.ts` et `packages/shared/src/quiz.ts` supprimés. Choix de quiz retiré de `HomeView.vue` et `RoomView.vue`.
+- Branches : travail en cours sur `fusion/phase-4-nettoyage`, mergé dans la branche de fusion.
 
 ## Vérifications de référence (avant fusion)
 - `docker compose up` : db, api et web démarrent ; `prisma db push` reporte le schéma déjà synchronisé.
 - Parcours fonctionnels validés par l'utilisateur : création de compte, connexion, création de salle, tchat, rejoindre une salle.
 
-## Vérifications après Phase 2 et Phase 3
+## Vérifications après Phase 2, 3 et 4
 - `npx vitest run` dans `apps/api` : 36 tests verts (15 moteur, 21 parser).
-- Build Docker : `tsc` et `vite build` passent, l'API démarre.
+- Build Docker : `tsc` et `vite build` passent, l'API démarre avec les routes `/api/rooms`, `/api/auth`, `/api/health`.
 - Création de salle avec le quiz `gender-reveal` : OK.
 - Création de salle avec le quiz `invalid` : refusée, les deux erreurs sont affichées dans la modale.
 
 ## Problèmes rencontrés
 - Nom de base `resto` hérité du `.env` (corrigé : base `quizz`).
 - `DATABASE_URL` désalignée (erreur P1000 sur le rôle `resto`), corrigée.
-- `prisma` ne fonctionne pas en local (dépendance `effect` incohérente sur la machine de développement) : la compilation et la génération du client passent par Docker.
+- `prisma` ne fonctionne pas en local (dépendance `effect` incohérente, `node_modules` non écrit sur le disque) : compilation et génération du client passent par Docker.
 - Fins de ligne CRLF détectées, à normaliser avec `.gitattributes`.
 - Socket.IO observé en polling ; upgrade WebSocket à vérifier.
-- `Dockerfile` API : `prisma db push --accept-data-loss` au démarrage (à remplacer par `migrate deploy`).
-- Route `/api/quizz` appelée par le front après suppression du contrôleur : corrigé en retirant le chargement des quiz de `HomeView.vue`.
+- `Dockerfile` API : `prisma db push --accept-data-loss` au démarrage. À remplacer par `migrate deploy` avant mise en production, ce qui suppose une migration initiale (`prisma migrate dev --name init`).
+- Route `/api/quizz` appelée par le front après suppression du contrôleur : corrigé.
 
 ## Phase 0 — Nettoyage préalable : terminée
 - Tâche 1 : suppression du compte admin — validée. Fichiers : `auth.service.ts`, `LoginView.vue`. Un ancien compte admin peut subsister dans une base existante ; il disparaît au reset.
 - Tâche 2 : `JWT_SECRET` obligatoire — validée (cas nominal et négatif). Fichiers : `auth.service.ts`, `docker-compose.yml`.
-- Tâche 3 : URL relatives — validée (requêtes via nginx sur `localhost:8080`, Socket.IO inclus). Fichiers : `services/auth.ts`, `services/room.ts`, `view/RoomView.vue`.
-- Tâche 4 : suppression de l'ancien seed — partielle, validée. Résidus traités en Phase 4 : `QuizService`, `QuizListController`, `services/quiz.ts`, choix de quiz dans `HomeView.vue` (ce dernier est désormais retiré).
+- Tâche 3 : URL relatives — validée (requêtes via nginx sur `localhost:8080`, Socket.IO inclus).
+- Tâche 4 : suppression de l'ancien seed — terminée, résidus traités en Phase 4.
 - Base renommée `quizz`, volume recréé, `.env` unique à la racine.
 
 ## Phase 1 — Copie du moteur et adaptation CJS : terminée
-- Moteur copié dans `apps/api/src/quiz-engine/` ; `parseQuizFile` et `node:fs` retirés.
-- Tests portés dans `apps/api/test/quiz-engine/`.
+- `parseQuizFile` et `node:fs` retirés du parser.
 - Dépendances ajoutées : `js-yaml`, `@types/js-yaml`, `vitest` (v5.1.1 ; compatibilité avec Vite 6 de `apps/web` vérifiée par le build web).
-- Reporté : test unitaire de `verifyToken` (à faire, Vitest est disponible).
+- Reporté : test unitaire de `verifyToken`.
 
-## Reste à faire en Phase 4
-- Supprimer `apps/web/src/services/quiz.ts`, `QuizView.vue` (déjà retiré selon la tâche 4) et la route `/quiz` si elle subsiste.
-- Retirer `RoomStartedSchema.question` et `GameQuestionSchema` de `packages/shared/src/room.ts`.
-- Remplacer `prisma db push --accept-data-loss` par `prisma migrate deploy` dans le `Dockerfile`, avant toute mise en production.
-- Vérifier avec `grep` qu'aucune référence à `Quiz`, `Question` ou `quizId` ne subsiste dans `apps/`.
+## Reste à faire (hors phase 5)
+- `.gitattributes` pour normaliser les fins de ligne.
+- Test unitaire de `verifyToken`.
+- Upgrade WebSocket à vérifier.
 
 ## Points restés ouverts
 - Limite du nombre de questions : proposition de 100, non tranchée.
 - Départ de l'host en cours de partie (roadmap §6, à traiter en Phase 5).
 - Délai de grâce à la déconnexion (Phase 7).
-- Suppression de `packages/core` une fois les tests migrés (fait pour les tests, le paquet reste à retirer).
