@@ -1,7 +1,7 @@
 # Suivi de la fusion
 
 ## Phase actuelle
-Phase 5 - Host et permissions (en cours, étape 0 : préparation)
+Phase 5 - Host et permissions (code terminé, Vitest 45/45 ; scripts Node de parcours écrits mais à rejouer via Docker ; front F-1 à F-6 à rédiger)
 
 ## Étapes de la roadmap
 - [x] Phase 0 — Nettoyage préalable
@@ -73,26 +73,27 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
   - [x] `room:lock`, `room:correct`, `room:next`, `room:validate` : vérification `ownerId` avant le moteur (`runAsOwner`), diffusion du snapshot après action.
   - [x] `room:answer` : membre de la salle, refus de l'owner, `isCorrect` masqué hors `correction`/`finished`, erreurs de `submitAnswer` capturées.
   - [x] `room:start` : création du moteur, ajout des membres (owner exclu), `startGame`, `markInProgress`, diffusion du snapshot. Moteur libéré en cas d'échec.
-  - [ ] Test : un joueur absent du moteur reçoit un refus propre (à couvrir en étape 7).
-  - Statut : Vitest 42/42, build Docker OK, handlers abonnés.
+  - [x] Test : un joueur absent du moteur reçoit un refus propre (test moteur `submitAnswer lève GameEngineError pour un joueur inconnu` + `try/catch` dans le gateway) — P-C.
+  - Statut : Vitest 45/45, build Docker OK, handlers abonnés.
 
 - [x] **Étape 4 — Présence de l'host**
   - [x] Compteur de sockets de l'owner par salle (`ownerSockets`).
   - [x] Délai de 2 minutes à zéro socket, annulé au retour (`room:join`).
   - [x] Notification `game:host-status` (`connected: true/false`) aux joueurs.
   - [x] Joueurs non retirés de la base en `IN_PROGRESS` (`setPlayerConnected`).
-  - Statut : build Docker OK. Tests de présence à faire (second script Node, non écrit).
+  - Statut : build Docker OK. Script `scripts/presence.mjs` écrit (9 contrôles) ; exécution à rejouer.
 
 - [x] **Étape 5 — Verrouillage automatique**
   - [x] `shouldAutoLock()` dans le moteur, appelé après chaque `room:answer` accepté.
-  - [x] Tests unitaires (4 cas), Vitest 42/42.
-  - [ ] À ajouter : verrouillage aussi à la déconnexion d'un joueur dans `leaveSocket`.
+  - [x] Tests unitaires (4 cas), Vitest 45/45.
+  - [x] Verrouillage aussi à la déconnexion d'un joueur dans `leaveSocket` (`setPlayerConnected(false)` puis `shouldAutoLock()`, sans retrait de la base) — P-A.
 
 - [x] **Étape 6 — Fin de partie**
   - [x] Expiration du délai en partie : `FINISHED`, moteur libéré, `game:ended` aux seuls joueurs.
   - [x] Expiration dans le lobby : suppression de la salle.
   - [x] Fin naturelle (`nextQuestion` sur la dernière question) : snapshot final diffusé, `finishGame` (`FINISHED`, moteur libéré, `game:ended`).
-  - [ ] Limite connue : si `markFinished` échoue, la salle reste `IN_PROGRESS` en base alors que le moteur est libéré (passe de robustesse à prévoir).
+  - [x] Robustesse de `finishGame` : `markFinished` réessayé une fois, erreur journalisée en cas de double échec, moteur libéré dans tous les cas — P-B.
+  - [ ] Limite résiduelle : en cas de double échec, la salle reste `IN_PROGRESS` en base sans moteur ; elle sera rattrapée par le nettoyage au démarrage (Phase 7).
 
 - [~] **Étape 7 — Tests**
   - [x] Scénario Node `scripts/scenario.mjs` : 19/19 contrôles verts (start, permissions, réponses, verrouillage auto, fin naturelle).
@@ -101,27 +102,44 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
   - [x] `room:answer` accepté une fois, refusé en double, sans `isCorrect` en `question_active`.
   - [x] Un joueur qui envoie `room:lock` est refusé, l'état ne change pas.
   - [x] Fin naturelle de partie : `game:ended` reçu par les joueurs seuls, salle retirée de la liste.
-  - [ ] Délai annulé au retour de l'host, expiration du délai (second script).
-  - [ ] Expiration avec question manuelle non jugée : fausse, partie arrêtée.
-  - [ ] Verrouillage automatique à la déconnexion d'un joueur (voir étape 5).
-  - [ ] Test en base : la salle est bien `FINISHED` après fin (le scénario ne le vérifie que indirectement).
+  - [x] Tests moteur : 45/45 (vérifié en relançant Vitest) — P-D.
+  - [x] Délai annulé au retour de l'host, expiration du délai : `scripts/presence.mjs` (9 contrôles), exécuté, RAS — P-E.
+  - [x] Expiration avec question manuelle non jugée : `scripts/expiry.mjs` (7 contrôles, score 0 pour la réponse non jugée), exécuté, RAS — P-F.
+  - [x] Verrouillage automatique à la déconnexion d'un joueur : `scripts/disconnect.mjs` exécuté après reconstruction de l'image API, 18/19 contrôles verts ; le 19e (`members`) est un défaut du script : `GET /api/rooms/:id` n'a pas de champ `members`, `nbParticipants: 3` prouve que Bob reste en base — P-A bis.
+  - [~] Vérification en base après fin de partie : `scenario.mjs` contrôle `FINISHED` (ou 404) via `GET /api/rooms/:id` ; contrôle à resserrer pour exiger `FINISHED` strictement — P-G.
 
 ## Front (suivi parallèle)
-- [ ] Écoute `game:snapshot`, `game:host-status`, `game:ended` (`useRoomGame.ts`)
-- [ ] Lobby et bouton « Lancer la partie » (owner)
-- [ ] Question active et envoi de `room:answer`
-- [ ] Contrôles owner (lock, correct, next, validate)
-- [ ] Bandeau de présence de l'host
-- [ ] Écran de fin (`game:ended`)
+Prérequis constatés (branche `fusion/phase-5`, commit `d1fc8b8`) :
+- `RoomView.vue` (330 lignes) ne gère que le tchat : `room:join`, `room:leave`, `room:participant-updated`, `room:deleted`, `room:chat-history`, `room:chat-message`. Aucun écouteur `game:*`, aucun bouton « Lancer la partie ».
+- Le composable `useRoomGame.ts` n'existe pas (aucun fichier `composables/`).
+- Résidus à nettoyer : styles `.start-actions`, `.start-button`, `.start-error` sans balisage correspondant ; import orphelin `GameView` dans `router/index.ts` (fichier absent, import inutilisé).
+- Le socket est créé dans `RoomView.vue` (`ref<Socket>`) : le composable devra le recevoir en paramètre.
 
-## Reste à traiter (Prompt 4)
-- `room:answer` : gérer `GameEngineError` si le joueur n'est pas dans le moteur.
-- `room:start` : créer le moteur, ajouter les membres comme joueurs, diffuser le snapshot filtré.
+Prompts à rédiger :
+- [ ] F-1 — Composable `useRoomGame.ts` : écoute `game:snapshot`, `game:host-status`, `game:ended`
+- [ ] F-2 — Lobby et bouton « Lancer la partie » (owner)
+- [ ] F-3 — Question active et envoi de `room:answer`
+- [ ] F-4 — Contrôles owner (lock, correct, next, validate)
+- [ ] F-5 — Bandeau de présence de l'host
+- [ ] F-6 — Écran de fin (`game:ended`)
+
+## Suivi des prompts de finition de la Phase 5
+- [x] P-A — Verrouillage à la déconnexion d'un joueur (code dans `leaveSocket`)
+- [x] P-B — Robustesse de `finishGame` (nouvel essai de `markFinished`)
+- [x] P-C — Refus propre d'un joueur absent du moteur
+- [x] P-D — Tests garde-fous moteur (45/45, relancés)
+- [x] P-E — `presence.mjs` (9 contrôles, exécuté, RAS)
+- [x] P-F — `expiry.mjs` (7 contrôles, exécuté, RAS)
+- [ ] P-G — Vérification `FINISHED` en base : resserrer le contrôle de `scenario.mjs` (et `presence.mjs`) pour exiger `FINISHED`, puis rejouer
+- [x] P-A bis — Test de parcours du verrouillage à la déconnexion d'un joueur (`scripts/disconnect.mjs`, comportement validé ; reste à remplacer le contrôle `members` par `nbParticipants === 3`)
+- [ ] F-1 à F-6 — Front (voir section Front)
+
+Ancien « Reste à traiter (Prompt 4) » : `room:answer` (erreurs de `submitAnswer` capturées) et `room:start` (moteur, joueurs, snapshot) sont faits.
 
 
 
 ## Points d'attention
-- **Chevauchement avec la Phase 7** : `leaveSocket` supprime aujourd'hui le `RoomParticipant` à la déconnexion. Il faut au minimum qu'un joueur déconnecté en cours de partie ne soit pas retiré de la base, pour le verrouillage automatique et le classement. Ce strict nécessaire est traité en Phase 5 ; le reste reste en Phase 7.
+- **Chevauchement avec la Phase 7** : `leaveSocket` supprime aujourd'hui le `RoomParticipant` à la déconnexion. Il faut au minimum qu'un joueur déconnecté en cours de partie ne soit pas retiré de la base, pour le verrouillage automatique et le classement. Ce strict nécessaire est traité en Phase 5 (joueur conservé en base, marqué déconnecté, verrouillage automatique : P-A) ; le reste reste en Phase 7.
 - **Redémarrage** : la `Map` est en mémoire. Une salle `IN_PROGRESS` sans moteur après redémarrage doit passer à `FINISHED` au démarrage (prévu en Phase 7, à anticiper si la base reste incohérente).
 
 ## Modifications réalisées
@@ -143,6 +161,7 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
 - Création de salle avec le quiz `invalid` : refusée, les deux erreurs sont affichées dans la modale.
 
 ## Problèmes rencontrés
+- Image Docker API périmée : après une modification du gateway, relancer `docker compose up -d --build api` avant de rejouer les scripts de parcours (un échec du verrouillage à la déconnexion était dû à une image non reconstruite).
 - Nom de base `resto` hérité du `.env` (corrigé : base `quizz`).
 - `DATABASE_URL` désalignée (erreur P1000 sur le rôle `resto`), corrigée.
 - `prisma` ne fonctionne pas en local (dépendance `effect` incohérente, `node_modules` non écrit sur le disque) : compilation et génération du client passent par Docker.
@@ -170,4 +189,5 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
 
 ## Points restés ouverts
 - Limite du nombre de questions : proposition de 100, non tranchée.
+- `scenario.mjs` à rejouer après le resserrement de P-G ; `presence.mjs` et `expiry.mjs` ont été exécutés (RAS).
 - Délai de grâce à la déconnexion des joueurs (Phase 7).
