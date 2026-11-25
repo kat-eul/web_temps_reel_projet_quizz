@@ -34,6 +34,7 @@ export class RoomGateway implements OnGatewayDisconnect {
   server!: Server;
 
   private readonly socketRooms = new Map<string, { roomId: number; userId: number }>();
+  private readonly ownerSockets = new Map<number, number>();
 
   constructor(
       private readonly roomService: RoomService,
@@ -58,6 +59,24 @@ export class RoomGateway implements OnGatewayDisconnect {
     const room = await this.roomService.join(result.data.roomId, userId);
     this.socketRooms.set(client.id, { roomId: room.id, userId });
     client.join(`room:${room.id}`);
+    if (userId === room.ownerId) {
+      this.ownerSockets.set(room.id, (this.ownerSockets.get(room.id) ?? 0) + 1);
+      this.gameService.cancelHostGrace(room.id);
+      this.server.to(`room:${room.id}`).emit('game:host-status', { connected: true });
+      if (this.gameService.getEngine(room.id)) {
+        this.broadcastSnapshot(room.id);
+      }
+    } else {
+      const engine = this.gameService.getEngine(room.id);
+      if (engine) {
+        try {
+          engine.setPlayerConnected(String(userId), true);
+        } catch {
+          // Ignore players not present in the current game engine.
+        }
+        this.broadcastSnapshot(room.id);
+      }
+    }
     this.server.to(`room:${room.id}`).emit('room:participant-updated', room);
 
     const game = await this.roomService.getGameState(room.id);
@@ -149,7 +168,7 @@ export class RoomGateway implements OnGatewayDisconnect {
       let engine: GameEngine | undefined;
       try {
         engine = this.gameService.createEngine(roomId, quiz, data.maxPlayers);
-        for (const m of data.members) {
+        for (const m of data.members.filter((m) => m.userId !== data.ownerId)) {
           engine.addPlayer(m.userId, m.pseudo);
         }
         engine.startGame();
@@ -362,18 +381,81 @@ export class RoomGateway implements OnGatewayDisconnect {
       client: Socket,
       membership: { roomId: number; userId: number },
   ): Promise<void> {
-    const deleted = await this.roomService.leave(membership.roomId, membership.userId);
+    const room = await this.roomService.getById(membership.roomId);
     this.socketRooms.delete(client.id);
     client.leave(`room:${membership.roomId}`);
 
-    if (!deleted) {
-      const room = await this.roomService.getById(membership.roomId);
-      this.server.to(`room:${membership.roomId}`).emit('room:participant-updated', room);
-    } else {
+    if (membership.userId === room.ownerId) {
+      const remainingSockets = (this.ownerSockets.get(room.id) ?? 1) - 1;
+      if (remainingSockets <= 0) {
+        this.ownerSockets.delete(room.id);
+        const engine = this.gameService.getEngine(room.id);
+        if (engine?.getSnapshot().state === 'question_active') {
+          try {
+            engine.lockCurrentQuestion();
+          } catch {
+            // Ignore if the question state changed while disconnecting.
+          }
+        }
+        this.server.to(`room:${room.id}`).emit('game:host-status', { connected: false });
+        this.gameService.startHostGrace(room.id, () => {
+          void this.onHostGraceExpired(room.id);
+        });
+        this.broadcastSnapshot(room.id);
+      } else {
+        this.ownerSockets.set(room.id, remainingSockets);
+      }
+      return;
+    }
+
+    if (room.state === 'IN_PROGRESS') {
+      const engine = this.gameService.getEngine(room.id);
+      if (engine) {
+        try {
+          engine.setPlayerConnected(String(membership.userId), false);
+        } catch {
+          // Ignore players not present in the current game engine.
+        }
+      }
+      this.broadcastSnapshot(room.id);
+      return;
+    }
+
+    const deleted = await this.roomService.leave(membership.roomId, membership.userId);
+    if (deleted) {
       this.server.to(`room:${membership.roomId}`).emit('room:deleted', {
         roomId: membership.roomId,
       });
+      return;
     }
+    const updatedRoom = await this.roomService.getById(membership.roomId);
+    this.server.to(`room:${membership.roomId}`).emit('room:participant-updated', updatedRoom);
+  }
+
+  private async onHostGraceExpired(roomId: number): Promise<void> {
+    const engine = this.gameService.getEngine(roomId);
+    if (engine) {
+      try { engine.closeOnExpiry(); } catch { /* état déjà final */ }
+      const ranking = engine.getLeaderboard().map((p) => ({ nickname: p.nickname, score: p.score }));
+      const room = await this.roomService.getById(roomId);
+      if (room.state === 'WAITING') {
+        await this.roomService.deleteRoom(roomId);
+        this.gameService.releaseEngine(roomId);
+        this.server.to(`room:${roomId}`).emit('room:deleted', { roomId });
+        return;
+      }
+      await this.roomService.markFinished(roomId);
+      this.gameService.releaseEngine(roomId);
+      const sockets = await this.server.in(`room:${roomId}`).fetchSockets();
+      for (const s of sockets) {
+        const m = this.socketRooms.get(s.id);
+        if (m && m.userId !== room.ownerId) {
+          s.emit('game:ended', { ranking });
+        }
+      }
+      return;
+    }
+    await this.roomService.deleteRoom(roomId).catch(() => undefined);
   }
 
   private getAuthenticatedUserId(client: Socket): number {

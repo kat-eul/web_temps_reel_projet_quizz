@@ -5,6 +5,24 @@ import type { Quiz } from '../quiz-engine/models/quiz';
 @Injectable()
 export class GameService {
   private readonly engines = new Map<number, GameEngine>();
+  private readonly hostTimers = new Map<number, NodeJS.Timeout>();
+
+  startHostGrace(roomId: number, onExpire: () => void, ms = 120_000): void {
+    this.cancelHostGrace(roomId);
+    const timer = setTimeout(() => {
+      this.hostTimers.delete(roomId);
+      onExpire();
+    }, ms);
+    this.hostTimers.set(roomId, timer);
+  }
+
+  cancelHostGrace(roomId: number): void {
+    const timer = this.hostTimers.get(roomId);
+    if (timer) {
+      clearTimeout(timer);
+      this.hostTimers.delete(roomId);
+    }
+  }
 
   createEngine(roomId: number, quiz: Quiz, maxPlayers: number): GameEngine {
     if (this.engines.has(roomId)) {
@@ -21,6 +39,7 @@ export class GameService {
   }
 
   releaseEngine(roomId: number): void {
+    this.cancelHostGrace(roomId);
     this.engines.delete(roomId);
   }
 }

@@ -62,6 +62,16 @@ export class RoomService implements OnModuleInit {
     this.notifyChanged();
   }
 
+  async markFinished(roomId: number): Promise<void> {
+    await this.prisma.room.update({ where: { id: roomId }, data: { state: 'FINISHED' } });
+    this.notifyChanged();
+  }
+
+  async deleteRoom(roomId: number): Promise<void> {
+    await this.prisma.room.deleteMany({ where: { id: roomId } });
+    this.notifyChanged();
+  }
+
   async create(input: CreateRoomInput, ownerId: number): Promise<Room> {
     try {
       parseQuizString(input.quizYaml);
