@@ -81,12 +81,12 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
   - [x] Délai de 2 minutes à zéro socket, annulé au retour (`room:join`).
   - [x] Notification `game:host-status` (`connected: true/false`) aux joueurs.
   - [x] Joueurs non retirés de la base en `IN_PROGRESS` (`setPlayerConnected`).
-  - Statut : build Docker OK. Tests manuels à faire (script Node ou front).
+  - Statut : build Docker OK. Tests de présence à faire (second script Node, non écrit).
 
 - [x] **Étape 5 — Verrouillage automatique**
   - [x] `shouldAutoLock()` dans le moteur, appelé après chaque `room:answer` accepté.
   - [x] Tests unitaires (4 cas), Vitest 42/42.
-  - [ ] À ajouter : verrouillage aussi à la déconnexion d'un joueur dans `leaveSocket` (étape 7).
+  - [ ] À ajouter : verrouillage aussi à la déconnexion d'un joueur dans `leaveSocket`.
 
 - [x] **Étape 6 — Fin de partie**
   - [x] Expiration du délai en partie : `FINISHED`, moteur libéré, `game:ended` aux seuls joueurs.
@@ -94,15 +94,17 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
   - [x] Fin naturelle (`nextQuestion` sur la dernière question) : snapshot final diffusé, `finishGame` (`FINISHED`, moteur libéré, `game:ended`).
   - [ ] Limite connue : si `markFinished` échoue, la salle reste `IN_PROGRESS` en base alors que le moteur est libéré (passe de robustesse à prévoir).
 
-- [ ] **Étape 7 — Tests**
-  - [ ] Parcours : `room:start` par l'owner, salle retirée de la liste, snapshot reçu par les joueurs.
-  - [ ] Parcours : `room:answer` accepté une fois, refusé en double, sans `isCorrect` en `question_active`.
-  - [ ] Un joueur qui envoie `room:lock` est refusé, l'état ne change pas.
-  - [x] Pas de fuite des bonnes réponses dans le snapshot pendant `question_active` (tests du moteur).
-  - [ ] Délai annulé au retour de l'host (script Node ou manuel).
+- [~] **Étape 7 — Tests**
+  - [x] Scénario Node `scripts/scenario.mjs` : 19/19 contrôles verts (start, permissions, réponses, verrouillage auto, fin naturelle).
+  - [x] Pas de fuite des bonnes réponses dans le snapshot pendant `question_active` (tests du moteur et scénario).
+  - [x] `room:start` par l'owner, salle retirée de la liste, snapshot reçu par les joueurs.
+  - [x] `room:answer` accepté une fois, refusé en double, sans `isCorrect` en `question_active`.
+  - [x] Un joueur qui envoie `room:lock` est refusé, l'état ne change pas.
+  - [x] Fin naturelle de partie : `game:ended` reçu par les joueurs seuls, salle retirée de la liste.
+  - [ ] Délai annulé au retour de l'host, expiration du délai (second script).
   - [ ] Expiration avec question manuelle non jugée : fausse, partie arrêtée.
   - [ ] Verrouillage automatique à la déconnexion d'un joueur (voir étape 5).
-  - [ ] Fin naturelle de partie : `game:ended` reçu, salle `FINISHED`, moteur libéré.
+  - [ ] Test en base : la salle est bien `FINISHED` après fin (le scénario ne le vérifie que indirectement).
 
 ## Front (suivi parallèle)
 - [ ] Écoute `game:snapshot`, `game:host-status`, `game:ended` (`useRoomGame.ts`)
