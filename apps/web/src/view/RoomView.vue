@@ -119,7 +119,6 @@ function sendMessage() {
     <section class="room-card" v-if="room">
       <p class="eyebrow">Salle créée</p>
       <h1>{{ room.name }}</h1>
-      <p>Quiz sélectionné : n°{{ room.quizId }}</p>
       <p>Participants : {{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</p>
       <section class="chat" aria-label="Tchat de la salle">
         <header class="chat-header">
