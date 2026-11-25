@@ -4,10 +4,12 @@ import { useRoute } from 'vue-router';
 import type { ChatMessage, Room } from '@quizz/shared';
 import { io, type Socket } from 'socket.io-client';
 import { getStoredSession } from '../services/auth';
+import { useRoomGame } from '../composables/useRoomGame';
 
 const route = useRoute();
 const room = ref<Room | null>(null);
 const socket = ref<Socket | null>(null);
+const { snapshot, hostConnected, ended, leaderboard } = useRoomGame(socket);
 const messages = ref<ChatMessage[]>([]);
 const draft = ref('');
 const chatError = ref('');
@@ -120,6 +122,7 @@ function sendMessage() {
       <p class="eyebrow">Salle créée</p>
       <h1>{{ room.name }}</h1>
       <p>Participants : {{ room.nbParticipants }} / {{ room.nbMaxParticipants }}</p>
+      <p v-if="snapshot">[debug F-1] État : {{ snapshot.state }} — host : {{ hostConnected }} — fin : {{ ended ? 'oui' : 'non' }} — joueurs : {{ leaderboard.length }}</p>
       <section class="chat" aria-label="Tchat de la salle">
         <header class="chat-header">
           <h2>Tchat</h2>
