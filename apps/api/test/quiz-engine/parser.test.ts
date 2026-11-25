@@ -2,14 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { parseQuizString } from '../src/parser/index.js';
-import { QuizParseError, QuizYamlSyntaxError } from '../src/parser/errors.js';
+import { parseQuizString } from '../../src/quiz-engine/parser/index.js';
+import { QuizParseError, QuizYamlSyntaxError } from '../../src/quiz-engine/parser/errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const examplesDir = resolve(__dirname, '../../../examples');
+const fixturesDir = resolve(__dirname, '../fixtures');
 
 function loadExample(name: string): string {
-  return readFileSync(resolve(examplesDir, name), 'utf-8');
+  return readFileSync(resolve(fixturesDir, name), 'utf-8');
 }
 
 describe('parseQuizString — cas valide', () => {

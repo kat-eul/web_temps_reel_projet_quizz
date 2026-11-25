@@ -66,8 +66,15 @@ Phase 1 - Copie du moteur et adaptation CJS
 
 ## Phase 1 — Copie du moteur et adaptation CJS (en cours)
 
-### Phase 1 - Étape 3 : retrait de parseQuizFile
+### Phase 1 - Étape 3 : retrait de parseQuizFile (terminée)
 - Statut : réalisée. `node:fs` et `parseQuizFile` retirés de `quiz-engine/parser/index.ts`.
 - Build Docker vérifié : API et web compilent, l'API démarre.
 - Build local : prérequis `shared` compilé et `prisma generate` lancés à la main (environnement).
 - Note : fins de ligne CRLF détectées, à normaliser avec `.gitattributes`.
+
+### Phase 1 - Étape 4 :Copie du moteur et adaptation CJS (terminée)
+- Tests portés dans `apps/api/test/quiz-engine/` (31 tests verts via `npm test -w @quizz/api`).
+- Fixtures dans `apps/api/test/fixtures/` : `gender-reveal` alignée sur le format courant (`packages/server/quizzes/`), `invalid` copiée de `examples/` (ancien format, à revoir en Phase 2).
+- `examples/` reste en ancien format : à unifier en Phase 2.
+- Note : `vitest` 5.x installé ; vérifier la compatibilité avec Vite 6 de `apps/web` (build OK).
+- Reporté : test unitaire de `verifyToken` (ajouté à la Phase 1 car Vitest est désormais disponible).

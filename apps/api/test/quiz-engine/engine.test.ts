@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Quiz } from '../src/models/quiz.js';
-import { GameEngine, GameEngineError } from '../src/engine/index.js';
+import { GameEngine, GameEngineError } from '../../src/quiz-engine/engine/index.js';
+import type { Quiz } from '../../src/quiz-engine/models/quiz.js';
 
 function buildQuiz(overrides: Partial<Quiz> = {}): Quiz {
   return {
