@@ -357,6 +357,15 @@ export class RoomGateway implements OnGatewayDisconnect {
       }
       await action(engine, roomId, result.data);
       this.broadcastSnapshot(roomId);
+      if (engine.getSnapshot().state === 'finished') {
+        try {
+          const room = await this.roomService.getById(roomId);
+          await this.finishGame(roomId, room.ownerId);
+        } catch (error) {
+          this.gameService.releaseEngine(roomId);
+          console.error(`Finalisation de la salle ${roomId} échouée :`, error);
+        }
+      }
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error
@@ -451,18 +460,24 @@ export class RoomGateway implements OnGatewayDisconnect {
         this.server.to(`room:${roomId}`).emit('room:deleted', { roomId });
         return;
       }
-      await this.roomService.markFinished(roomId);
-      this.gameService.releaseEngine(roomId);
-      const sockets = await this.server.in(`room:${roomId}`).fetchSockets();
-      for (const s of sockets) {
-        const m = this.socketRooms.get(s.id);
-        if (m && m.userId !== room.ownerId) {
-          s.emit('game:ended', { ranking });
-        }
-      }
+      await this.finishGame(roomId, room.ownerId);
       return;
     }
     await this.roomService.deleteRoom(roomId).catch(() => undefined);
+  }
+
+  private async finishGame(roomId: number, ownerId: number): Promise<void> {
+    const engine = this.gameService.getEngine(roomId);
+    const ranking = engine?.getLeaderboard().map((p) => ({ nickname: p.nickname, score: p.score })) ?? [];
+    await this.roomService.markFinished(roomId);
+    this.gameService.releaseEngine(roomId);
+    const sockets = await this.server.in(`room:${roomId}`).fetchSockets();
+    for (const s of sockets) {
+      const m = this.socketRooms.get(s.id);
+      if (m && m.userId !== ownerId) {
+        s.emit('game:ended', { ranking });
+      }
+    }
   }
 
   private getAuthenticatedUserId(client: Socket): number {
