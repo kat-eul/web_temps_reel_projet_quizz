@@ -346,6 +346,27 @@ describe('GameEngine — snapshot et clôture', () => {
     });
   });
 
+  describe('GameEngine — garde-fous', () => {
+    it('closeOnExpiry lève une erreur depuis lobby', () => {
+      const engine = new GameEngine(buildQuiz(), 5);
+      expect(() => engine.closeOnExpiry()).toThrow(GameEngineError);
+    });
+
+    it('closeOnExpiry lève une erreur depuis finished', () => {
+      const engine = new GameEngine(buildQuiz(), 5);
+      engine.addPlayer(1, 'Alice');
+      engine.startGame();
+      engine.closeOnExpiry();
+      expect(() => engine.closeOnExpiry()).toThrow(GameEngineError);
+    });
+
+    it('submitAnswer lève GameEngineError pour un joueur inconnu', () => {
+      const engine = new GameEngine(buildQuiz(), 5);
+      engine.startGame();
+      expect(() => engine.submitAnswer('999', true)).toThrow(GameEngineError);
+    });
+  });
+
   it('marque faux les réponses manuelles en attente à la clôture sans changer le score', () => {
     const engine = createEngine({
       questions: [{ id: 'manual', title: 'Réponse manuelle', points: 3, answer: { mode: 'text', correction: 'manual' } }],

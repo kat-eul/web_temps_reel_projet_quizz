@@ -429,8 +429,11 @@ export class RoomGateway implements OnGatewayDisconnect {
       if (engine) {
         try {
           engine.setPlayerConnected(String(membership.userId), false);
+          if (engine.shouldAutoLock()) {
+            engine.lockCurrentQuestion();
+          }
         } catch {
-          // Ignore players not present in the current game engine.
+          // Joueur absent du moteur, ou état déjà modifié : rien à faire.
         }
       }
       this.broadcastSnapshot(room.id);
@@ -469,7 +472,15 @@ export class RoomGateway implements OnGatewayDisconnect {
   private async finishGame(roomId: number, ownerId: number): Promise<void> {
     const engine = this.gameService.getEngine(roomId);
     const ranking = engine?.getLeaderboard().map((p) => ({ nickname: p.nickname, score: p.score })) ?? [];
-    await this.roomService.markFinished(roomId);
+    try {
+      await this.roomService.markFinished(roomId);
+    } catch (error) {
+      try {
+        await this.roomService.markFinished(roomId);
+      } catch (retryError) {
+        console.error(`markFinished a échoué deux fois pour la salle ${roomId} :`, retryError);
+      }
+    }
     this.gameService.releaseEngine(roomId);
     const sockets = await this.server.in(`room:${roomId}`).fetchSockets();
     for (const s of sockets) {

@@ -152,6 +152,9 @@ async function main() {
     const after = await api('/rooms');
     check(!after.json.some((r) => r.id === roomId), 'salle non listée après fin');
 
+    const detail = await api(`/rooms/${roomId}`);
+    check(detail.status === 404 || detail.json.state === 'FINISHED', 'salle FINISHED ou supprimée en base', detail.json);
+
     [O, A, B].forEach((c) => c.socket.disconnect());
 }
 
