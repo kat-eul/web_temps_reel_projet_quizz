@@ -253,12 +253,18 @@ export class GameEngine {
       currentQuestion: this.state === 'lobby' ? null : this.exposedQuestion(),
       players: [...this.players.values()],
       teams: [...this.teams.values()],
-      currentQuestionAnswers: this.getCurrentQuestionAnswers(),
+      currentQuestionAnswers: this.exposesCorrectness()
+        ? this.getCurrentQuestionAnswers()
+        : this.getCurrentQuestionAnswers().map((a) => ({ ...a, isCorrect: undefined })),
       pendingManualValidation: this.state === 'lobby' ? false : this.hasPendingManualValidation(),
     };
   }
 
   // --- Utilitaires internes ---
+
+  private exposesCorrectness(): boolean {
+    return this.state === 'correction' || this.state === 'finished';
+  }
 
   private applyPoints(playerId: string, points: number): void {
     const player = this.requirePlayer(playerId);

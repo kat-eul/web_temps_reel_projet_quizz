@@ -57,6 +57,11 @@ export class RoomService implements OnModuleInit {
     };
   }
 
+  async markInProgress(roomId: number): Promise<void> {
+    await this.prisma.room.update({ where: { id: roomId }, data: { state: 'IN_PROGRESS' } });
+    this.notifyChanged();
+  }
+
   async create(input: CreateRoomInput, ownerId: number): Promise<Room> {
     try {
       parseQuizString(input.quizYaml);

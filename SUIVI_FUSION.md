@@ -56,22 +56,24 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
 
 ## Plan de la Phase 5
 - [x] **Étape 1 — `GameService` (singleton)**
-  - `Map<roomId, GameEngine>` créée au `room:start`, libérée à `FINISHED`.
+  - `Map<roomId, GameEngine>` créée au `room:start`, libérée en cas d'échec de démarrage.
   - Orchestre le moteur, sans logique de jeu hors du moteur.
   - Gère les comptes à rebours de déconnexion de l'host, par salle.
   - Statut : `GameService` créé et injecté. Build Docker OK. Les comptes à rebours restent à faire (étape 4).
+  - À faire : libérer le moteur à `FINISHED` (étape 6).
 - [x] **Étape 2 — Adaptation du moteur**
   - [x] `addPlayer(userId, nickname, teamId?)` : identifiant = `String(userId)`.
   - [ ] Étapes figées pendant l'absence de l'host (lobby, verrouillée, correction), via état ou gestion côté service. Reste à faire (étape 4).
   - [x] Méthode de clôture à l'expiration : `closeOnExpiry()`, question manuelle non jugée → fausse, puis `finished`.
   - [x] `getSnapshot()` ne renvoie les bonnes réponses qu'en `correction` et `finished` (`maskQuestion`).
+  - [x] `isCorrect` masqué dans `currentQuestionAnswers` hors `correction`/`finished`.
   - Statut : Vitest 38/38.
 - [x] **Étape 3 — Permissions côté serveur**
-  - [x] `room:lock`, `room:correct`, `room:next`, `room:validate` : vérification `ownerId` avant le moteur (`runAsOwner`).
-  - [x] `room:answer` : membre de la salle, refus de l'owner, `isCorrect` masqué hors `correction`/`finished`.
-  - [ ] `room:start` : création réelle du moteur (Prompt 4). Seul `assertOwner` est en place.
-  - [ ] `room:answer` : gérer `GameEngineError` si le joueur n'est pas dans le moteur (Prompt 4).
-  - Statut : Vitest 38/38, build Docker OK, handlers abonnés.
+  - [x] `room:lock`, `room:correct`, `room:next`, `room:validate` : vérification `ownerId` avant le moteur (`runAsOwner`), diffusion du snapshot après action.
+  - [x] `room:answer` : membre de la salle, refus de l'owner, `isCorrect` masqué hors `correction`/`finished`, erreurs de `submitAnswer` capturées.
+  - [x] `room:start` : création du moteur (`createEngine`), ajout des membres, `startGame`, `markInProgress`, diffusion du snapshot. Moteur libéré en cas d'échec.
+  - [ ] Vérifier en test qu'un joueur absent du moteur reçoit un refus propre (`GameEngineError` déjà capturée dans `room:answer`).
+  - Statut : Vitest 38/38, build Docker OK (`tsc` API validé), handlers abonnés.
 - [ ] **Étape 4 — Présence de l'host**
   - Compteur de sockets de l'owner par salle.
   - Démarrage du délai à zéro socket, annulation au retour.
@@ -82,7 +84,10 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
 - [ ] **Étape 6 — Fin de partie**
   - Expiration en partie : `FINISHED`, moteur libéré, classement aux joueurs connectés.
   - Expiration dans le lobby : suppression de la salle.
+  - Passage à `FINISHED` en fin naturelle de partie (`nextQuestion` jusqu'au bout) : libérer le moteur et mettre à jour `Room.state`.
 - [ ] **Étape 7 — Tests**
+  - [ ] Parcours manuel : `room:start` par l'owner, salle retirée de la liste, snapshot reçu par les joueurs.
+  - [ ] Parcours manuel : `room:answer` accepté une fois, refusé en double, sans `isCorrect` en `question_active`.
   - [ ] Un joueur qui envoie `room:lock` est refusé, l'état ne change pas.
   - [x] Pas de fuite des bonnes réponses dans le snapshot pendant `question_active` (couvert par les tests du moteur).
   - [ ] Délai annulé au retour de l'host.

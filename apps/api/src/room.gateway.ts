@@ -20,6 +20,7 @@ import { RoomService } from './room.service';
 import { ChatService } from './chat.service';
 import { GameService } from './game/game.service';
 import { GameEngine } from './quiz-engine/engine/gameEngine';
+import { parseQuizString } from './quiz-engine/parser/index.js';
 
 const RoomManualValidationSchema = z.object({
   roomId: z.coerce.number().int().positive(),
@@ -139,9 +140,26 @@ export class RoomGateway implements OnGatewayDisconnect {
 
     try {
       await this.assertOwner(result.data.roomId, userId);
-      const game = await this.roomService.start(result.data.roomId, userId);
-      this.server.to(`room:${result.data.roomId}`).emit('room:started', game);
-      return { ok: true, game };
+      const data = await this.roomService.getStartData(result.data.roomId);
+      if (data.state !== 'WAITING') {
+        throw new WsException('La partie est déjà lancée ou terminée.');
+      }
+      const quiz = parseQuizString(data.quizYaml);
+      const roomId = result.data.roomId;
+      let engine: GameEngine | undefined;
+      try {
+        engine = this.gameService.createEngine(roomId, quiz, data.maxPlayers);
+        for (const m of data.members) {
+          engine.addPlayer(m.userId, m.pseudo);
+        }
+        engine.startGame();
+        await this.roomService.markInProgress(roomId);
+      } catch (error) {
+        this.gameService.releaseEngine(roomId);
+        throw error;
+      }
+      this.broadcastSnapshot(roomId);
+      return { ok: true, game: engine.getSnapshot() };
     } catch (error) {
       return {
         ok: false,
@@ -248,7 +266,16 @@ export class RoomGateway implements OnGatewayDisconnect {
       return { accepted: false, reason: 'L’animateur ne joue pas.' };
     }
 
-    const answerResult = engine.submitAnswer(String(userId), payload.value);
+    let answerResult;
+    try {
+      answerResult = engine.submitAnswer(String(userId), payload.value);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Une erreur est survenue.';
+      return { accepted: false, reason: message };
+    }
+    if (answerResult.accepted) {
+      this.broadcastSnapshot(result.data.roomId);
+    }
     const state = engine.getSnapshot().state;
     if (state === 'correction' || state === 'finished') {
       return answerResult;
@@ -303,6 +330,7 @@ export class RoomGateway implements OnGatewayDisconnect {
         return { ok: false, error: 'La partie n’est pas lancée.' };
       }
       await action(engine, roomId, result.data);
+      this.broadcastSnapshot(roomId);
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error
@@ -315,6 +343,12 @@ export class RoomGateway implements OnGatewayDisconnect {
           : 'Une erreur est survenue.';
       return { ok: false, error: message };
     }
+  }
+
+  private broadcastSnapshot(roomId: number): void {
+    const engine = this.gameService.getEngine(roomId);
+    if (!engine) return;
+    this.server.to(`room:${roomId}`).emit('game:snapshot', engine.getSnapshot());
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
