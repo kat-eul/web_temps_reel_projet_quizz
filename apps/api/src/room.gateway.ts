@@ -14,9 +14,18 @@ import {
   RoomStartSchema,
   SendChatMessageSchema,
 } from '@quizz/shared';
+import { z } from 'zod';
 import { AuthService } from './auth.service';
 import { RoomService } from './room.service';
 import { ChatService } from './chat.service';
+import { GameService } from './game/game.service';
+import { GameEngine } from './quiz-engine/engine/gameEngine';
+
+const RoomManualValidationSchema = z.object({
+  roomId: z.coerce.number().int().positive(),
+  playerId: z.string(),
+  isCorrect: z.boolean(),
+});
 
 @WebSocketGateway({ cors: { origin: true } })
 export class RoomGateway implements OnGatewayDisconnect {
@@ -29,6 +38,7 @@ export class RoomGateway implements OnGatewayDisconnect {
       private readonly roomService: RoomService,
       private readonly authService: AuthService,
       private readonly chatService: ChatService,
+      private readonly gameService: GameService,
   ) {}
 
   @SubscribeMessage('room:join')
@@ -128,6 +138,7 @@ export class RoomGateway implements OnGatewayDisconnect {
     }
 
     try {
+      await this.assertOwner(result.data.roomId, userId);
       const game = await this.roomService.start(result.data.roomId, userId);
       this.server.to(`room:${result.data.roomId}`).emit('room:started', game);
       return { ok: true, game };
@@ -137,6 +148,112 @@ export class RoomGateway implements OnGatewayDisconnect {
         error: error instanceof Error ? error.message : 'Impossible de lancer la partie.',
       };
     }
+  }
+
+  @SubscribeMessage('room:lock')
+  async lockCurrentQuestion(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.runAsOwner(
+        client,
+        payload,
+        RoomMembershipSchema,
+        (engine) => engine.lockCurrentQuestion(),
+    );
+  }
+
+  @SubscribeMessage('room:correct')
+  async enterCorrection(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.runAsOwner(
+        client,
+        payload,
+        RoomMembershipSchema,
+        (engine) => engine.enterCorrection(),
+    );
+  }
+
+  @SubscribeMessage('room:next')
+  async nextQuestion(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.runAsOwner(
+        client,
+        payload,
+        RoomMembershipSchema,
+        (engine) => engine.nextQuestion(),
+    );
+  }
+
+  @SubscribeMessage('room:validate')
+  async validateManualAnswer(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.runAsOwner(
+        client,
+        payload,
+        RoomManualValidationSchema,
+        (engine, _roomId, data) => {
+          engine.validateManualAnswer(data.playerId, data.isCorrect);
+        },
+    );
+  }
+
+  @SubscribeMessage('room:answer')
+  async submitAnswer(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ accepted: boolean; reason?: string; isCorrect?: boolean }> {
+    const userId = this.getAuthenticatedUserId(client);
+    if (typeof payload !== 'object' || payload === null || !('value' in payload)) {
+      return { accepted: false, reason: 'Payload invalide.' };
+    }
+
+    const result = RoomMembershipSchema.safeParse(payload);
+    if (!result.success) {
+      return { accepted: false, reason: 'Payload invalide.' };
+    }
+
+    const membership = this.socketRooms.get(client.id);
+    if (!membership || membership.roomId !== result.data.roomId) {
+      return { accepted: false, reason: 'Vous n’appartenez pas à cette salle.' };
+    }
+
+    const engine = this.gameService.getEngine(result.data.roomId);
+    if (!engine) {
+      return { accepted: false, reason: 'La partie n’est pas lancée.' };
+    }
+
+    let room;
+    try {
+      room = await this.roomService.getById(result.data.roomId);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === 'object' &&
+            error !== null &&
+            'message' in error &&
+            typeof error.message === 'string'
+          ? error.message
+          : 'Une erreur est survenue.';
+      return { accepted: false, reason: message };
+    }
+
+    if (userId === room.ownerId) {
+      return { accepted: false, reason: 'L’animateur ne joue pas.' };
+    }
+
+    const answerResult = engine.submitAnswer(String(userId), payload.value);
+    const state = engine.getSnapshot().state;
+    if (state === 'correction' || state === 'finished') {
+      return answerResult;
+    }
+    return { accepted: answerResult.accepted, reason: answerResult.reason };
   }
 
   @SubscribeMessage('room:leave')
@@ -152,6 +269,52 @@ export class RoomGateway implements OnGatewayDisconnect {
     }
 
     await this.leaveSocket(client, membership);
+  }
+
+  private async assertOwner(roomId: number, userId: number): Promise<void> {
+    const room = await this.roomService.getById(roomId);
+    if (room.ownerId !== userId) {
+      throw new WsException('Seul l’animateur peut piloter la partie.');
+    }
+  }
+
+  private async runAsOwner<T extends { roomId: number }>(
+      client: Socket,
+      payload: unknown,
+      schema: z.ZodType<T>,
+      action: (engine: GameEngine, roomId: number, data: T) => void | Promise<void>,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    const userId = this.getAuthenticatedUserId(client);
+    const result = schema.safeParse(payload);
+    if (!result.success) {
+      return { ok: false, error: 'Payload invalide.' };
+    }
+
+    const roomId = result.data.roomId;
+    const membership = this.socketRooms.get(client.id);
+    if (!membership || membership.roomId !== roomId) {
+      return { ok: false, error: 'Vous n’appartenez pas à cette salle.' };
+    }
+
+    try {
+      await this.assertOwner(roomId, userId);
+      const engine = this.gameService.getEngine(roomId);
+      if (!engine) {
+        return { ok: false, error: 'La partie n’est pas lancée.' };
+      }
+      await action(engine, roomId, result.data);
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === 'object' &&
+            error !== null &&
+            'message' in error &&
+            typeof error.message === 'string'
+          ? error.message
+          : 'Une erreur est survenue.';
+      return { ok: false, error: message };
+    }
   }
 
   async handleDisconnect(client: Socket): Promise<void> {

@@ -55,33 +55,44 @@ Phase 5 - Host et permissions (en cours, étape 0 : préparation)
 - Une question manuelle déjà jugée garde son verdict. Seule la dernière sans verdict compte comme incorrecte.
 
 ## Plan de la Phase 5
-
 - [x] **Étape 1 — `GameService` (singleton)**
-    - `Map<roomId, GameEngine>` créée au `room:start`, libérée à `FINISHED`.
-    - Orchestre le moteur, sans logique de jeu hors du moteur.
-    - Gère les comptes à rebours de déconnexion de l'host, par salle.
-- [ ] **Étape 2 — Adaptation du moteur**
-    - `addPlayer(userId, nickname)` : identifiant = `userId`.
-    - Étapes figées pendant l'absence de l'host (lobby, verrouillée, correction), via état ou gestion côté service.
-    - Méthode de clôture à l'expiration : question manuelle non jugée → fausse, puis `finished`.
-    - `getSnapshot()` ne renvoie les bonnes réponses qu'en `correction` (aujourd'hui `currentQuestion` les contient en `question_active`).
-- [ ] **Étape 3 — Permissions côté serveur**
-    - `room:start`, `room:lock`, `room:correct`, `room:next`, `room:validate` : vérification `ownerId` avant le moteur.
-    - `room:answer` : membre de la salle, état `question_active`, pas de réponse précédente.
+  - `Map<roomId, GameEngine>` créée au `room:start`, libérée à `FINISHED`.
+  - Orchestre le moteur, sans logique de jeu hors du moteur.
+  - Gère les comptes à rebours de déconnexion de l'host, par salle.
+  - Statut : `GameService` créé et injecté. Build Docker OK. Les comptes à rebours restent à faire (étape 4).
+- [x] **Étape 2 — Adaptation du moteur**
+  - [x] `addPlayer(userId, nickname, teamId?)` : identifiant = `String(userId)`.
+  - [ ] Étapes figées pendant l'absence de l'host (lobby, verrouillée, correction), via état ou gestion côté service. Reste à faire (étape 4).
+  - [x] Méthode de clôture à l'expiration : `closeOnExpiry()`, question manuelle non jugée → fausse, puis `finished`.
+  - [x] `getSnapshot()` ne renvoie les bonnes réponses qu'en `correction` et `finished` (`maskQuestion`).
+  - Statut : Vitest 38/38.
+- [x] **Étape 3 — Permissions côté serveur**
+  - [x] `room:lock`, `room:correct`, `room:next`, `room:validate` : vérification `ownerId` avant le moteur (`runAsOwner`).
+  - [x] `room:answer` : membre de la salle, refus de l'owner, `isCorrect` masqué hors `correction`/`finished`.
+  - [ ] `room:start` : création réelle du moteur (Prompt 4). Seul `assertOwner` est en place.
+  - [ ] `room:answer` : gérer `GameEngineError` si le joueur n'est pas dans le moteur (Prompt 4).
+  - Statut : Vitest 38/38, build Docker OK, handlers abonnés.
 - [ ] **Étape 4 — Présence de l'host**
-    - Compteur de sockets de l'owner par salle.
-    - Démarrage du délai à zéro socket, annulation au retour.
-    - Notification « en attente du retour de l'host » aux joueurs.
+  - Compteur de sockets de l'owner par salle.
+  - Démarrage du délai à zéro socket, annulation au retour.
+  - Notification « en attente du retour de l'host » aux joueurs.
+  - Étapes figées pendant l'absence de l'host (reprise de l'Étape 2).
 - [ ] **Étape 5 — Verrouillage automatique**
-    - Après chaque réponse : verrouillage si tous les joueurs connectés ont répondu, ou s'il n'y a personne de connecté.
+  - Après chaque réponse : verrouillage si tous les joueurs connectés ont répondu, ou s'il n'y a personne de connecté.
 - [ ] **Étape 6 — Fin de partie**
-    - Expiration en partie : `FINISHED`, moteur libéré, classement aux joueurs connectés.
-    - Expiration dans le lobby : suppression de la salle.
+  - Expiration en partie : `FINISHED`, moteur libéré, classement aux joueurs connectés.
+  - Expiration dans le lobby : suppression de la salle.
 - [ ] **Étape 7 — Tests**
-    - Un joueur qui envoie `room:lock` est refusé, l'état ne change pas.
-    - Pas de fuite des bonnes réponses dans le snapshot pendant `question_active`.
-    - Délai annulé au retour de l'host.
-    - Expiration avec question manuelle non jugée : fausse, partie arrêtée.
+  - [ ] Un joueur qui envoie `room:lock` est refusé, l'état ne change pas.
+  - [x] Pas de fuite des bonnes réponses dans le snapshot pendant `question_active` (couvert par les tests du moteur).
+  - [ ] Délai annulé au retour de l'host.
+  - [ ] Expiration avec question manuelle non jugée : fausse, partie arrêtée.
+
+## Reste à traiter (Prompt 4)
+- `room:answer` : gérer `GameEngineError` si le joueur n'est pas dans le moteur.
+- `room:start` : créer le moteur, ajouter les membres comme joueurs, diffuser le snapshot filtré.
+
+
 
 ## Points d'attention
 - **Chevauchement avec la Phase 7** : `leaveSocket` supprime aujourd'hui le `RoomParticipant` à la déconnexion. Il faut au minimum qu'un joueur déconnecté en cours de partie ne soit pas retiré de la base, pour le verrouillage automatique et le classement. Ce strict nécessaire est traité en Phase 5 ; le reste reste en Phase 7.
