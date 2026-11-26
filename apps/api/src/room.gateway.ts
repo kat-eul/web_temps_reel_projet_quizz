@@ -77,12 +77,11 @@ export class RoomGateway implements OnGatewayDisconnect {
         this.broadcastSnapshot(room.id);
       }
     }
-    this.server.to(`room:${room.id}`).emit('room:participant-updated', room);
-
-    const game = await this.roomService.getGameState(room.id);
-    if (game) {
-      client.emit('room:started', game);
+    const engine = this.gameService.getEngine(room.id);
+    if (engine) {
+      client.emit('game:snapshot', engine.getSnapshot());
     }
+    this.server.to(`room:${room.id}`).emit('room:participant-updated', room);
 
     const messages = await this.chatService.history(room.id, userId);
     client.emit('room:chat-history', messages);

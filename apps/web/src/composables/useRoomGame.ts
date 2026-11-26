@@ -8,6 +8,12 @@ export function useRoomGame(socket: Ref<Socket | null>) {
   const hostConnected = ref(true);
   const ended = ref<GameEndedPayload | null>(null);
 
+  const answeredIds = computed(() => new Set(snapshot.value?.answeredPlayerIds ?? []));
+  const hasAnswered = (playerId: string) => answeredIds.value.has(playerId);
+  const answeredCount = computed(() => snapshot.value?.answeredPlayerIds.length ?? 0);
+  const connectedPlayerCount = computed(
+    () => snapshot.value?.players.filter((player) => player.connected === true).length ?? 0,
+  );
   const leaderboard = computed(() =>
     snapshot.value ? [...snapshot.value.players].sort((a, b) => b.score - a.score) : [],
   );
@@ -46,5 +52,15 @@ export function useRoomGame(socket: Ref<Socket | null>) {
     { immediate: true, flush: 'sync' },
   );
 
-  return { snapshot, hostConnected, ended, leaderboard, reset };
+  return {
+    snapshot,
+    hostConnected,
+    ended,
+    leaderboard,
+    answeredIds,
+    hasAnswered,
+    answeredCount,
+    connectedPlayerCount,
+    reset,
+  };
 }

@@ -50,6 +50,7 @@ describe('GameEngine — cycle de vie et scoring de base', () => {
 
   it("démarre en lobby et n'accepte pas les réponses avant startGame", () => {
     expect(engine.getSnapshot().state).toBe('lobby');
+    expect(engine.getSnapshot().answeredPlayerIds).toEqual([]);
     const result = engine.submitAnswer(alice.id, true);
     expect(result.accepted).toBe(false);
   });
@@ -242,6 +243,52 @@ describe('GameEngine — découplage média/réponse', () => {
 });
 
 describe('GameEngine — snapshot et clôture', () => {
+  function createTextAnswerEngine() {
+    const engine = createEngine({
+      questions: [
+        {
+          id: 'q1',
+          title: 'Réponse texte',
+          points: 1,
+          answer: { mode: 'text', correction: 'manual' },
+        },
+      ],
+    });
+    const alice = engine.addPlayer(1, 'Alice');
+    engine.startGame();
+    engine.submitAnswer(alice.id, 'Réponse secrète Alice');
+    return { engine, alice };
+  }
+
+  it('ne révèle pas la valeur saisie pendant question_active et indique qui a répondu', () => {
+    const { engine, alice } = createTextAnswerEngine();
+    const snapshot = engine.getSnapshot();
+
+    expect(snapshot.state).toBe('question_active');
+    expect(JSON.stringify(snapshot)).not.toContain('Réponse secrète Alice');
+    expect(snapshot.answeredPlayerIds).toEqual([alice.id]);
+  });
+
+  it('ne révèle pas les valeurs pendant question_locked et conserve les ids des répondants', () => {
+    const { engine, alice } = createTextAnswerEngine();
+    engine.lockCurrentQuestion();
+    const snapshot = engine.getSnapshot();
+
+    expect(snapshot.currentQuestionAnswers).toEqual([]);
+    expect(snapshot.answeredPlayerIds).toEqual([alice.id]);
+  });
+
+  it('révèle les valeurs saisies à partir de la correction', () => {
+    const { engine, alice } = createTextAnswerEngine();
+    engine.lockCurrentQuestion();
+    engine.enterCorrection();
+    const snapshot = engine.getSnapshot();
+
+    expect(snapshot.currentQuestionAnswers).toContainEqual(
+        expect.objectContaining({ playerId: alice.id, value: 'Réponse secrète Alice' }),
+    );
+  });
+
   it('masque les réponses des questions choice et text automatique pendant question_active', () => {
     const quiz = buildQuiz({
       questions: [

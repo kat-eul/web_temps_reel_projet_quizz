@@ -169,8 +169,8 @@ async function main() {
         check(
             bobOnQuestion2?.connected === false
                 && aliceOnQuestion2?.connected === true
-                && !activeQuestion2?.currentQuestionAnswers?.some((answer) => answer.playerId === String(alice.user.id)),
-            'Bob est déconnecté et Alice est connectée sans réponse à la question 2',
+                && activeQuestion2?.currentQuestionAnswers?.length === 0,
+            'Bob est déconnecté et les valeurs de réponse sont masquées pendant la question 2',
             activeQuestion2,
         );
 

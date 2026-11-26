@@ -262,9 +262,12 @@ export class GameEngine {
       currentQuestion: this.state === 'lobby' ? null : this.exposedQuestion(),
       players: [...this.players.values()],
       teams: [...this.teams.values()],
+      answeredPlayerIds: this.state === 'lobby'
+        ? []
+        : this.getCurrentQuestionAnswers().map((answer) => answer.playerId),
       currentQuestionAnswers: this.exposesCorrectness()
         ? this.getCurrentQuestionAnswers()
-        : this.getCurrentQuestionAnswers().map((a) => ({ ...a, isCorrect: undefined })),
+        : [],
       pendingManualValidation: this.state === 'lobby' ? false : this.hasPendingManualValidation(),
     };
   }

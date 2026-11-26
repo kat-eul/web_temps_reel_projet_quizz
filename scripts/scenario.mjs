@@ -94,7 +94,7 @@ async function main() {
 
     const O = await connect(owner.token);
     const A = await connect(alice.token);
-    const B = await connect(bob.token);
+    let B = await connect(bob.token);
     O.socket.emit('room:join', { roomId });
     A.socket.emit('room:join', { roomId });
     B.socket.emit('room:join', { roomId });
@@ -116,9 +116,37 @@ async function main() {
     check(!leaks, 'pas de bonne réponse en question_active', leaks);
     check(!snapA?.players.some((p) => p.id === String(owner.user.id)), 'owner absent des joueurs');
 
+    B.socket.disconnect();
+    await wait(200);
+    B = await connect(bob.token);
+    const snapshotsBeforeRejoin = B.snapshots.length;
+    B.socket.emit('room:join', { roomId });
+    await wait(1000);
+    const rejoinedSnapshot = B.snapshots.slice(snapshotsBeforeRejoin)
+        .find((snapshot) => snapshot.state === 'question_active');
+    check(
+        !!rejoinedSnapshot,
+        'Bob reçoit le snapshot question_active dans la seconde suivant room:join',
+        B.snapshots.slice(snapshotsBeforeRejoin),
+    );
+
     const ans1 = await emit(A, 'room:answer', { roomId, value: ['A'] });
+    await wait(300);
+    check(
+        B.snapshots.at(-1)?.answeredPlayerIds?.includes(String(alice.user.id)),
+        'Bob voit qui a répondu sans voir la valeur pendant question_active',
+        B.snapshots.at(-1)?.answeredPlayerIds,
+    );
     check(ans1?.accepted === true, 'réponse acceptée une fois', ans1);
     check(ans1?.isCorrect === undefined, 'isCorrect non révélé en question_active', ans1);
+    const bobSnapshotAfterAnswer = B.snapshots.at(-1);
+    check(
+        bobSnapshotAfterAnswer?.state === 'question_active'
+            && bobSnapshotAfterAnswer.currentQuestionAnswers.length === 0
+            && bobSnapshotAfterAnswer.answeredPlayerIds.includes(String(alice.user.id)),
+        'Bob voit qui a répondu sans voir la valeur pendant question_active',
+        bobSnapshotAfterAnswer,
+    );
     const ans2 = await emit(A, 'room:answer', { roomId, value: ['A'] });
     check(ans2?.accepted === false, 'double réponse refusée', ans2);
 

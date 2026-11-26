@@ -25,6 +25,8 @@ export interface GameSnapshot {
   currentQuestion: Question | null;
   players: Player[];
   teams: Team[];
+  /** IDs of players who answered the current question (empty in lobby). */
+  answeredPlayerIds: string[];
   /** réponses reçues pour la question courante (vide en lobby) — permet à l'animateur de voir qui a répondu quoi */
   currentQuestionAnswers: Answer[];
   /** true si la question courante contient des réponses manuelles en attente de validation */
