@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import type { ChatMessage, Room } from '@quizz/shared';
+import { useRoute, useRouter } from 'vue-router';
+import type { ChatMessage, Room, RoomClosedPayload } from '@quizz/shared';
 import { io, type Socket } from 'socket.io-client';
 import { getStoredSession } from '../services/auth';
 import { useRoomGame } from '../composables/useRoomGame';
@@ -10,8 +10,10 @@ import OwnerControls from '../components/game/OwnerControls.vue';
 import CorrectionView from '../components/game/CorrectionView.vue';
 import HostStatusBanner from '../components/game/HostStatusBanner.vue';
 import FinalRanking from '../components/game/FinalRanking.vue';
+import QuitConfirmModal from '../components/game/QuitConfirmModal.vue';
 
 const route = useRoute();
+const router = useRouter();
 const room = ref<Room | null>(null);
 const socket = shallowRef<Socket | null>(null);
 const currentUser = getStoredSession();
@@ -27,6 +29,11 @@ const answerSubmitting = ref(false);
 const answerError = ref('');
 const ownerActionBusy = ref(false);
 const ownerActionError = ref('');
+const showQuitModal = ref(false);
+const quitBusy = ref(false);
+const quitError = ref('');
+const closedMessage = ref('');
+let closedRedirectTimeout: ReturnType<typeof setTimeout> | null = null;
 const myId = String(currentUser?.user?.id ?? '');
 const alreadyAnswered = computed(() => hasAnswered(myId));
 const isOwner = computed(() => !!room.value && room.value.ownerId === currentUser?.user?.id);
@@ -88,6 +95,20 @@ onMounted(async () => {
     socket.value.on('room:deleted', () => {
       room.value = null;
     });
+    socket.value.on('room:closed', (_payload: RoomClosedPayload) => {
+      const wasOwner = isOwner.value;
+      room.value = null;
+      showQuitModal.value = false;
+      quitBusy.value = false;
+      if (wasOwner) {
+        void router.push('/home');
+        return;
+      }
+      closedMessage.value = "L'animateur a quitté la salle. Vous allez être redirigé vers l'accueil.";
+      closedRedirectTimeout = setTimeout(() => {
+        void router.push('/home');
+      }, 3000);
+    });
     socket.value.on('room:chat-history', (history: ChatMessage[]) => {
       messages.value = [...history].sort(
         (left, right) =>
@@ -105,8 +126,9 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  if (!socket.value || !room.value) return;
-  socket.value.emit('room:leave', { roomId: room.value.id });
+  if (closedRedirectTimeout) clearTimeout(closedRedirectTimeout);
+  if (!socket.value) return;
+  if (room.value) socket.value.emit('room:leave', { roomId: room.value.id });
   socket.value.disconnect();
 });
 
@@ -228,14 +250,44 @@ function nextQuestion() {
 function validateAnswer(playerId: string, isCorrect: boolean) {
   sendOwnerAction('room:validate', { playerId, isCorrect });
 }
+
+function quitRoom() {
+  if (!socket.value || !room.value || quitBusy.value) return;
+
+  quitBusy.value = true;
+  quitError.value = '';
+  socket.value.emit(
+    isOwner.value ? 'room:close' : 'room:quit',
+    { roomId: room.value.id },
+    (response: { ok: boolean; error?: string; reason?: string }) => {
+      quitBusy.value = false;
+      if (!response.ok) {
+        quitError.value = response.reason ?? response.error ?? 'Impossible de quitter la salle.';
+        return;
+      }
+      if (!isOwner.value) {
+        void router.push('/home');
+      }
+    },
+  );
+}
 </script>
 
 <template>
   <main class="room-page">
+    <p v-if="closedMessage" class="closed-message" role="status">{{ closedMessage }}</p>
     <section class="room-card" v-if="room">
       <HostStatusBanner v-if="!isOwner" :connected="hostConnected" />
-      <p class="eyebrow">Salle créée</p>
-      <h1>{{ room.name }}</h1>
+      <div class="room-heading">
+        <div>
+          <p class="eyebrow">Salle créée</p>
+          <h1>{{ room.name }}</h1>
+        </div>
+        <button class="quit-button" type="button" @click="showQuitModal = true">
+          {{ isOwner ? 'Fermer la salle' : 'Quitter la salle' }}
+        </button>
+      </div>
+      <p v-if="quitError" class="quit-error" role="alert">{{ quitError }}</p>
       <p>Joueurs : {{ Math.max(room.nbParticipants - 1, 0) }} / {{ room.nbMaxParticipants - 1 }}</p>
       <div v-if="!snapshot">
         <div v-if="isOwner" class="start-actions">
@@ -337,7 +389,11 @@ function validateAnswer(playerId: string, isCorrect: boolean) {
           title="Partie terminée"
         />
       </section>
-      <section class="chat" aria-label="Tchat de la salle">
+      <section
+        v-if="!snapshot || snapshot.state === 'finished'"
+        class="chat"
+        aria-label="Tchat de la salle"
+      >
         <header class="chat-header">
           <h2>Tchat</h2>
           <span v-if="connectionError" class="connection-error">{{ connectionError }}</span>
@@ -373,6 +429,13 @@ function validateAnswer(playerId: string, isCorrect: boolean) {
         </form>
       </section>
     </section>
+    <QuitConfirmModal
+      :open="showQuitModal"
+      :is-owner="isOwner"
+      :busy="quitBusy"
+      @confirm="quitRoom"
+      @cancel="showQuitModal = false"
+    />
   </main>
 </template>
 
@@ -386,11 +449,46 @@ function validateAnswer(playerId: string, isCorrect: boolean) {
 }
 
 .room-card {
+  position: relative;
   width: min(720px, calc(100vw - 2rem));
   background: white;
   border-radius: 18px;
   padding: 2rem;
   box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+}
+
+.room-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.room-heading h1 {
+  margin: 0 0 1rem;
+}
+
+.quit-button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quit-error,
+.closed-message {
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.closed-message {
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  background: white;
 }
 
 .eyebrow {

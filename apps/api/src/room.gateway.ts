@@ -71,6 +71,7 @@ export class RoomGateway implements OnGatewayDisconnect {
       if (engine) {
         try {
           engine.setPlayerConnected(String(userId), true);
+          this.gameService.cancelPlayersGrace(room.id);
         } catch {
           // Ignore players not present in the current game engine.
         }
@@ -324,6 +325,118 @@ export class RoomGateway implements OnGatewayDisconnect {
     await this.leaveSocket(client, membership);
   }
 
+  @SubscribeMessage('room:close')
+  async closeRoom(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    let roomId: number | undefined;
+    try {
+      const userId = this.getAuthenticatedUserId(client);
+      const result = RoomMembershipSchema.safeParse(payload);
+      if (!result.success) {
+        return { ok: false, error: 'Payload de salle invalide.' };
+      }
+
+      roomId = result.data.roomId;
+      const membership = this.socketRooms.get(client.id);
+      if (!membership || membership.roomId !== roomId) {
+        return { ok: false, error: 'Vous n’appartenez pas à cette salle.' };
+      }
+
+      const room = await this.roomService.getById(roomId);
+      if (userId !== room.ownerId) {
+        return { ok: false, error: 'Seul l’animateur peut fermer la salle.' };
+      }
+
+      this.gameService.cancelHostGrace(roomId);
+      this.gameService.cancelPlayersGrace(roomId);
+      this.ownerSockets.delete(roomId);
+      this.server.to(`room:${roomId}`).emit('room:closed', { reason: 'host_left' });
+      await this.roomService.deleteRoom(roomId);
+      this.gameService.releaseEngine(roomId);
+
+      const sockets = await this.server.in(`room:${roomId}`).fetchSockets();
+      for (const [socketId, socketMembership] of this.socketRooms) {
+        if (socketMembership.roomId === roomId) {
+          this.socketRooms.delete(socketId);
+        }
+      }
+      for (const socket of sockets) {
+        await socket.leave(`room:${roomId}`);
+      }
+
+      return { ok: true };
+    } catch (error) {
+      console.error(`Fermeture de la salle ${roomId ?? 'inconnue'} échouée :`, error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Impossible de fermer la salle.',
+      };
+    }
+  }
+
+  @SubscribeMessage('room:quit')
+  async quitRoom(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() payload: unknown,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    let roomId: number | undefined;
+    try {
+      const userId = this.getAuthenticatedUserId(client);
+      const result = RoomMembershipSchema.safeParse(payload);
+      if (!result.success) {
+        return { ok: false, error: 'Payload de salle invalide.' };
+      }
+
+      roomId = result.data.roomId;
+      const membership = this.socketRooms.get(client.id);
+      if (!membership || membership.roomId !== roomId) {
+        return { ok: false, error: 'Vous n’appartenez pas à cette salle.' };
+      }
+
+      const room = await this.roomService.getById(roomId);
+      if (userId === room.ownerId) {
+        return { ok: false, error: 'Utilisez la fermeture de salle.' };
+      }
+
+      if (room.state === 'WAITING') {
+        const deleted = await this.roomService.leave(roomId, userId);
+        if (deleted) {
+          this.server.to(`room:${roomId}`).emit('room:deleted', { roomId });
+        } else {
+          const updatedRoom = await this.roomService.getById(roomId);
+          this.server.to(`room:${roomId}`).emit('room:participant-updated', updatedRoom);
+        }
+      } else if (room.state === 'IN_PROGRESS') {
+        const engine = this.gameService.getEngine(roomId);
+        if (!engine) {
+          return { ok: false, error: 'La partie est indisponible.' };
+        }
+        engine.setPlayerConnected(String(userId), false);
+        if (engine.shouldAutoLock()) {
+          engine.lockCurrentQuestion();
+        }
+        await this.roomService.removeParticipant(roomId, userId);
+      } else {
+        return { ok: false, error: 'La partie est terminée.' };
+      }
+
+      this.socketRooms.delete(client.id);
+      client.leave(`room:${roomId}`);
+      if (room.state === 'IN_PROGRESS') {
+        this.broadcastSnapshot(roomId);
+      }
+      return { ok: true };
+    } catch (error) {
+      console.error(`Départ de la salle ${roomId ?? 'inconnue'} échoué :`, error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Impossible de quitter la salle.',
+      };
+    }
+  }
+
   private async assertOwner(roomId: number, userId: number): Promise<void> {
     const room = await this.roomService.getById(roomId);
     if (room.ownerId !== userId) {
@@ -429,6 +542,11 @@ export class RoomGateway implements OnGatewayDisconnect {
       if (engine) {
         try {
           engine.setPlayerConnected(String(membership.userId), false);
+          if (!engine.hasConnectedPlayers()) {
+            this.gameService.startPlayersGrace(room.id, () => {
+              void this.onPlayersGraceExpired(room.id);
+            });
+          }
           if (engine.shouldAutoLock()) {
             engine.lockCurrentQuestion();
           }
@@ -449,6 +567,24 @@ export class RoomGateway implements OnGatewayDisconnect {
     }
     const updatedRoom = await this.roomService.getById(membership.roomId);
     this.server.to(`room:${membership.roomId}`).emit('room:participant-updated', updatedRoom);
+  }
+
+  private async onPlayersGraceExpired(roomId: number): Promise<void> {
+    const engine = this.gameService.getEngine(roomId);
+    if (!engine || engine.hasConnectedPlayers()) return;
+
+    try {
+      engine.closeOnExpiry();
+    } catch {
+      // L'état est peut-être déjà final.
+    }
+
+    try {
+      const room = await this.roomService.getById(roomId);
+      await this.finishGame(roomId, room.ownerId);
+    } catch (error) {
+      console.error(`Finalisation de la salle ${roomId} après le départ des joueurs échouée :`, error);
+    }
   }
 
   private async onHostGraceExpired(roomId: number): Promise<void> {

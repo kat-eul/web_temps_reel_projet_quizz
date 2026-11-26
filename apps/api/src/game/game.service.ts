@@ -6,8 +6,9 @@ import type { Quiz } from '@quizz/shared';
 export class GameService {
   private readonly engines = new Map<number, GameEngine>();
   private readonly hostTimers = new Map<number, NodeJS.Timeout>();
+  private readonly playersTimers = new Map<number, NodeJS.Timeout>();
 
-  startHostGrace(roomId: number, onExpire: () => void, ms = 120_000): void {
+  startHostGrace(roomId: number, onExpire: () => void, ms = 45_000): void {
     this.cancelHostGrace(roomId);
     const timer = setTimeout(() => {
       this.hostTimers.delete(roomId);
@@ -21,6 +22,23 @@ export class GameService {
     if (timer) {
       clearTimeout(timer);
       this.hostTimers.delete(roomId);
+    }
+  }
+
+  startPlayersGrace(roomId: number, onExpire: () => void, ms = 30_000): void {
+    this.cancelPlayersGrace(roomId);
+    const timer = setTimeout(() => {
+      this.playersTimers.delete(roomId);
+      onExpire();
+    }, ms);
+    this.playersTimers.set(roomId, timer);
+  }
+
+  cancelPlayersGrace(roomId: number): void {
+    const timer = this.playersTimers.get(roomId);
+    if (timer) {
+      clearTimeout(timer);
+      this.playersTimers.delete(roomId);
     }
   }
 
@@ -40,6 +58,7 @@ export class GameService {
 
   releaseEngine(roomId: number): void {
     this.cancelHostGrace(roomId);
+    this.cancelPlayersGrace(roomId);
     this.engines.delete(roomId);
   }
 }

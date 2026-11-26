@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 
 const BASE = 'http://localhost:8080';
-const GRACE_MS = Number(process.argv[2] ?? 120000);
+const GRACE_MS = Number(process.argv[2] ?? 45000);
 const RUN = Date.now().toString(36);
 const ROOM_NAME = `presence-${Date.now()}`;
 

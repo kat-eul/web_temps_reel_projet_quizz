@@ -22,6 +22,12 @@ export const RoomMembershipSchema = z.object({
   roomId: z.coerce.number().int().positive(),
 });
 
+export const RoomCloseSchema = RoomMembershipSchema;
+
+export const RoomClosedSchema = z.object({
+  reason: z.enum(['host_left']),
+});
+
 export const RoomStartSchema = z.object({
   roomId: z.coerce.number().int().positive(),
 });
@@ -49,5 +55,6 @@ export type CreateRoomInput = z.infer<typeof CreateRoomSchema>;
 export type RoomPollInput = z.infer<typeof RoomPollSchema>;
 export type RoomPollResponse = z.infer<typeof RoomPollResponseSchema>;
 export type RoomState = z.infer<typeof RoomStateSchema>;
+export type RoomClosedPayload = z.infer<typeof RoomClosedSchema>;
 export type RoomStartInput = z.infer<typeof RoomStartSchema>;
 export type RoomStarted = z.infer<typeof RoomStartedSchema>;

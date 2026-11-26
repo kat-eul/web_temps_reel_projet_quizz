@@ -60,10 +60,11 @@ async function getAccount(pseudo) {
 function connect(token) {
     const socket = io(BASE, { transports: ['websocket'], auth: { token } });
     const snapshots = [];
-    const events = { hostStatus: [], ended: [] };
+    const events = { hostStatus: [], ended: [], closed: [] };
     socket.on('game:snapshot', (s) => snapshots.push(s));
     socket.on('game:host-status', (p) => events.hostStatus.push(p));
     socket.on('game:ended', (p) => events.ended.push(p));
+    socket.on('room:closed', (p) => events.closed.push(p));
     socket.on('connect_error', (err) => console.log('connect_error :', err.message));
     return new Promise((resolve, reject) => {
         const t = setTimeout(() => reject(new Error('timeout connexion socket')), 5000);
@@ -183,6 +184,42 @@ async function main() {
     const detail = await api(`/rooms/${roomId}`);
     check(detail.status === 200, 'la salle existe toujours en base après la fin', detail);
     check(detail.json.state === 'FINISHED', 'Room.state vaut FINISHED en base', detail.json);
+
+    const exitRoom = await api('/rooms', {
+        method: 'POST',
+        token: owner.token,
+        body: { name: `${ROOM_NAME}-exit`, nbMaxParticipants: 5, quizYaml: QUIZ_YAML },
+    });
+    const exitRoomId = exitRoom.json.id;
+    check(!!exitRoomId, 'salle de test de sortie créée', exitRoom.json);
+
+    O.socket.emit('room:join', { roomId: exitRoomId });
+    A.socket.emit('room:join', { roomId: exitRoomId });
+    B.socket.emit('room:join', { roomId: exitRoomId });
+    await wait(300);
+    const participantsBeforeQuit = await api(`/rooms/${exitRoomId}`);
+    check(participantsBeforeQuit.json.nbParticipants === 3, 'trois membres avant le départ du joueur');
+
+    const quitResult = await emit(A, 'room:quit', { roomId: exitRoomId });
+    check(quitResult?.ok === true, 'joueur A quitte avec room:quit', quitResult);
+    const participantsAfterQuit = await api(`/rooms/${exitRoomId}`);
+    check(
+        participantsAfterQuit.json.nbParticipants === participantsBeforeQuit.json.nbParticipants - 1,
+        'nbParticipants décrémenté après room:quit',
+        participantsAfterQuit.json,
+    );
+
+    const closeByPlayer = await emit(B, 'room:close', { roomId: exitRoomId });
+    check(closeByPlayer?.ok === false, 'fermeture refusée pour un joueur', closeByPlayer);
+
+    const closeResult = await emit(O, 'room:close', { roomId: exitRoomId });
+    check(closeResult?.ok === true, 'animateur ferme la salle avec room:close', closeResult);
+    await wait(100);
+    check(B.events.closed.some((event) => event.reason === 'host_left'), 'joueur B reçoit room:closed', B.events.closed);
+    const deletedRoom = await api(`/rooms/${exitRoomId}`);
+    check(deletedRoom.status === 404, 'salle fermée supprimée de la base', deletedRoom);
+    const roomsAfterClose = await api('/rooms');
+    check(!roomsAfterClose.json.some((r) => r.id === exitRoomId), 'salle fermée absente de la liste');
 
     [O, A, B].forEach((c) => c.socket.disconnect());
 }

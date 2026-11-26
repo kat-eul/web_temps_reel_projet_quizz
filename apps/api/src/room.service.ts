@@ -211,6 +211,15 @@ export class RoomService implements OnModuleInit {
     });
   }
 
+  async removeParticipant(roomId: number, userId: number): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.roomParticipant.deleteMany({ where: { roomId, userId } });
+      const nbParticipants = await tx.roomParticipant.count({ where: { roomId } });
+      await tx.room.update({ where: { id: roomId }, data: { nbParticipants } });
+    });
+    this.notifyChanged();
+  }
+
   async deleteEmptyRooms(): Promise<number> {
     const result = await this.prisma.room.deleteMany({
       where: { participants: { none: {} } },

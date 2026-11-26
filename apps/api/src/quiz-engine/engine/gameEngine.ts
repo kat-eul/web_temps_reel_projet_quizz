@@ -69,6 +69,10 @@ export class GameEngine {
     player.connected = connected;
   }
 
+  hasConnectedPlayers(): boolean {
+    return [...this.players.values()].some((player) => player.connected === true);
+  }
+
   addTeam(name: string): Team {
     if (!this.quiz.teamsEnabled) {
       throw new GameEngineError("Ce quiz n'a pas les équipes activées (teams.enabled: false).");
