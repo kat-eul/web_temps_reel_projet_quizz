@@ -76,6 +76,7 @@ export class RoomGateway implements OnGatewayDisconnect {
         }
         this.broadcastSnapshot(room.id);
       }
+      client.emit('game:host-status', { connected: (this.ownerSockets.get(room.id) ?? 0) > 0 });
     }
     const engine = this.gameService.getEngine(room.id);
     if (engine) {

@@ -6,12 +6,16 @@ import { io, type Socket } from 'socket.io-client';
 import { getStoredSession } from '../services/auth';
 import { useRoomGame } from '../composables/useRoomGame';
 import QuestionCard from '../components/game/QuestionCard.vue';
+import OwnerControls from '../components/game/OwnerControls.vue';
+import CorrectionView from '../components/game/CorrectionView.vue';
+import HostStatusBanner from '../components/game/HostStatusBanner.vue';
+import FinalRanking from '../components/game/FinalRanking.vue';
 
 const route = useRoute();
 const room = ref<Room | null>(null);
 const socket = shallowRef<Socket | null>(null);
 const currentUser = getStoredSession();
-const { snapshot, hasAnswered, answeredCount, connectedPlayerCount } = useRoomGame(socket);
+const { snapshot, hostConnected, ended, leaderboard, hasAnswered, answeredCount, connectedPlayerCount } = useRoomGame(socket);
 const messages = ref<ChatMessage[]>([]);
 const draft = ref('');
 const chatError = ref('');
@@ -21,9 +25,20 @@ const starting = ref(false);
 const startError = ref('');
 const answerSubmitting = ref(false);
 const answerError = ref('');
+const ownerActionBusy = ref(false);
+const ownerActionError = ref('');
 const myId = String(currentUser?.user?.id ?? '');
 const alreadyAnswered = computed(() => hasAnswered(myId));
 const isOwner = computed(() => !!room.value && room.value.ownerId === currentUser?.user?.id);
+const myPlayer = computed(() => snapshot.value?.players.find((player) => player.id === myId));
+const finalRanking = computed(() =>
+  leaderboard.value.map(({ nickname, score }) => ({ nickname, score })),
+);
+const isLastQuestion = computed(
+  () =>
+    !!snapshot.value &&
+    snapshot.value.currentQuestionIndex === snapshot.value.totalQuestions - 1,
+);
 const canStart = computed(
   () =>
     isOwner.value &&
@@ -168,11 +183,57 @@ function submitAnswer(value: boolean | string | string[] | number) {
     },
   );
 }
+
+function sendOwnerAction(
+  event: 'room:lock' | 'room:correct' | 'room:next' | 'room:validate',
+  extra: { playerId: string; isCorrect: boolean } | undefined = undefined,
+) {
+  if (!socket.value?.connected || !room.value || ownerActionBusy.value) {
+    ownerActionError.value = 'Connexion indisponible pour effectuer cette action.';
+    return;
+  }
+
+  ownerActionBusy.value = true;
+  ownerActionError.value = '';
+  const timeoutId = setTimeout(() => {
+    ownerActionBusy.value = false;
+    ownerActionError.value = 'Pas de réponse du serveur, réessayez.';
+  }, 5000);
+  socket.value.emit(
+    event,
+    { roomId: room.value.id, ...extra },
+    (response: { ok: boolean; reason?: string; error?: string }) => {
+      clearTimeout(timeoutId);
+      ownerActionBusy.value = false;
+      if (!response.ok) {
+        ownerActionError.value =
+          response.reason ?? response.error ?? "Impossible d'effectuer cette action.";
+      }
+    },
+  );
+}
+
+function lockQuestion() {
+  sendOwnerAction('room:lock');
+}
+
+function enterCorrection() {
+  sendOwnerAction('room:correct');
+}
+
+function nextQuestion() {
+  sendOwnerAction('room:next');
+}
+
+function validateAnswer(playerId: string, isCorrect: boolean) {
+  sendOwnerAction('room:validate', { playerId, isCorrect });
+}
 </script>
 
 <template>
   <main class="room-page">
     <section class="room-card" v-if="room">
+      <HostStatusBanner v-if="!isOwner" :connected="hostConnected" />
       <p class="eyebrow">Salle créée</p>
       <h1>{{ room.name }}</h1>
       <p>Joueurs : {{ Math.max(room.nbParticipants - 1, 0) }} / {{ room.nbMaxParticipants - 1 }}</p>
@@ -200,13 +261,81 @@ function submitAnswer(value: boolean | string | string[] | number) {
           :read-only="isOwner"
           @submit="submitAnswer"
         />
-        <p v-if="isOwner" class="answer-progress">
-          {{ answeredCount }} / {{ connectedPlayerCount }} ont répondu
+        <div v-if="isOwner" class="owner-active-actions">
+          <p class="answer-progress">
+            {{ answeredCount }} / {{ connectedPlayerCount }} ont répondu
+          </p>
+          <OwnerControls
+            :snapshot="snapshot"
+            :busy="ownerActionBusy"
+            :is-last-question="isLastQuestion"
+            @lock="lockQuestion"
+            @correct="enterCorrection"
+            @next="nextQuestion"
+            @validate="validateAnswer"
+          />
+        </div>
+        <p v-if="isOwner && ownerActionError" class="answer-error" role="alert">
+          {{ ownerActionError }}
         </p>
-        <p v-else-if="alreadyAnswered" class="answer-sent">
+        <p v-if="!isOwner && alreadyAnswered" class="answer-sent">
           Réponse envoyée, en attente des autres joueurs.
         </p>
         <p v-if="answerError" class="answer-error" role="alert">{{ answerError }}</p>
+      </section>
+      <section v-if="snapshot?.state === 'question_locked'" class="game-question">
+        <OwnerControls
+          v-if="isOwner"
+          :snapshot="snapshot"
+          :busy="ownerActionBusy"
+          :is-last-question="isLastQuestion"
+          @lock="lockQuestion"
+          @correct="enterCorrection"
+          @next="nextQuestion"
+          @validate="validateAnswer"
+        />
+        <p v-else>Question verrouillée, correction en cours…</p>
+        <p v-if="ownerActionError" class="answer-error" role="alert">{{ ownerActionError }}</p>
+      </section>
+      <section v-if="snapshot?.state === 'correction'" class="game-question">
+        <template v-if="isOwner">
+          <OwnerControls
+            :snapshot="snapshot"
+            :busy="ownerActionBusy"
+            :is-last-question="isLastQuestion"
+            @lock="lockQuestion"
+            @correct="enterCorrection"
+            @next="nextQuestion"
+            @validate="validateAnswer"
+          />
+          <p v-if="!snapshot.currentQuestion" class="answer-error" role="alert">
+            Question indisponible dans le snapshot.
+          </p>
+        </template>
+        <template v-else-if="snapshot.currentQuestion && myPlayer">
+          <CorrectionView
+            :question="snapshot.currentQuestion"
+            :my-answer="snapshot.currentQuestionAnswers.find((answer) => answer.playerId === myId)"
+            :my-score="myPlayer.score"
+          />
+        </template>
+        <p v-else class="answer-error" role="alert">
+          {{ snapshot.currentQuestion ? 'Joueur indisponible dans le snapshot.' : 'Question indisponible dans le snapshot.' }}
+        </p>
+        <p v-if="ownerActionError" class="answer-error" role="alert">{{ ownerActionError }}</p>
+      </section>
+      <section v-if="snapshot?.state === 'finished'" class="game-question">
+        <FinalRanking
+          v-if="isOwner"
+          :ranking="finalRanking"
+          title="Classement final"
+        />
+        <FinalRanking
+          v-else
+          :ranking="ended?.ranking ?? finalRanking"
+          :my-nickname="myPlayer?.nickname"
+          title="Partie terminée"
+        />
       </section>
       <section class="chat" aria-label="Tchat de la salle">
         <header class="chat-header">
@@ -330,15 +459,32 @@ h1 {
   margin-top: 1.5rem;
 }
 
+.owner-active-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .answer-progress,
 .answer-sent {
   color: #475569;
   font-weight: 700;
 }
 
+.answer-progress {
+  margin: 0;
+}
+
 .answer-error {
   color: #b91c1c;
   font-size: 0.875rem;
+}
+
+.game-finished {
+  margin-top: 1.5rem;
+  color: #0f172a;
+  font-weight: 700;
 }
 
 .chat-messages {
