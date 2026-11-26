@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { ChatMessage, Room } from '@quizz/shared';
 import { io, type Socket } from 'socket.io-client';
 import { getStoredSession } from '../services/auth';
 import { useRoomGame } from '../composables/useRoomGame';
+import QuestionCard from '../components/game/QuestionCard.vue';
 
 const route = useRoute();
 const room = ref<Room | null>(null);
-const socket = ref<Socket | null>(null);
+const socket = shallowRef<Socket | null>(null);
 const currentUser = getStoredSession();
-const { snapshot, hostConnected, ended, leaderboard } = useRoomGame(socket);
+const { snapshot, hasAnswered, answeredCount, connectedPlayerCount } = useRoomGame(socket);
 const messages = ref<ChatMessage[]>([]);
 const draft = ref('');
 const chatError = ref('');
@@ -18,6 +19,10 @@ const connectionError = ref('');
 const chatScroll = ref<HTMLElement | null>(null);
 const starting = ref(false);
 const startError = ref('');
+const answerSubmitting = ref(false);
+const answerError = ref('');
+const myId = String(currentUser?.user?.id ?? '');
+const alreadyAnswered = computed(() => hasAnswered(myId));
 const isOwner = computed(() => !!room.value && room.value.ownerId === currentUser?.user?.id);
 const canStart = computed(
   () =>
@@ -25,6 +30,14 @@ const canStart = computed(
     !snapshot.value &&
     room.value?.state === 'WAITING' &&
     (room.value?.nbParticipants ?? 0) >= 2,
+);
+
+watch(
+  alreadyAnswered,
+  (answered) => {
+    if (answered) answerSubmitting.value = false;
+  },
+  { immediate: true },
 );
 
 onMounted(async () => {
@@ -139,6 +152,22 @@ function startGame() {
     },
   );
 }
+
+function submitAnswer(value: boolean | string | string[] | number) {
+  if (!socket.value || !room.value || answerSubmitting.value || alreadyAnswered.value) return;
+
+  answerSubmitting.value = true;
+  answerError.value = '';
+  socket.value.emit(
+    'room:answer',
+    { roomId: room.value.id, value },
+    (response: { accepted: boolean; reason?: string }) => {
+      if (response.accepted) return;
+      answerError.value = response.reason ?? 'Impossible d’envoyer votre réponse.';
+      answerSubmitting.value = false;
+    },
+  );
+}
 </script>
 
 <template>
@@ -147,17 +176,38 @@ function startGame() {
       <p class="eyebrow">Salle créée</p>
       <h1>{{ room.name }}</h1>
       <p>Joueurs : {{ Math.max(room.nbParticipants - 1, 0) }} / {{ room.nbMaxParticipants - 1 }}</p>
-      <p v-if="snapshot">[debug F-1] État : {{ snapshot.state }} — host : {{ hostConnected }} — fin : {{ ended ? 'oui' : 'non' }} — joueurs : {{ leaderboard.length }}</p>
-      <div v-if="isOwner && !snapshot" class="start-actions">
-        <button class="start-button" type="button" :disabled="!canStart || starting" @click="startGame">
-          Lancer la partie
-        </button>
-        <p v-if="room.nbParticipants < 2" class="start-hint">
-          Au moins un joueur doit avoir rejoint la salle.
-        </p>
-        <p v-if="startError" class="start-error" role="alert">{{ startError }}</p>
+      <div v-if="!snapshot">
+        <div v-if="isOwner" class="start-actions">
+          <button class="start-button" type="button" :disabled="!canStart || starting" @click="startGame">
+            {{ starting ? 'Lancement...' : 'Lancer la partie' }}
+          </button>
+          <p v-if="room.nbParticipants < 2" class="start-hint">
+            Au moins un joueur doit avoir rejoint la salle.
+          </p>
+          <p v-if="startError" class="start-error" role="alert">{{ startError }}</p>
+        </div>
+        <p v-else>En attente du lancement par l'animateur.</p>
       </div>
-      <p v-else-if="!isOwner && !snapshot">En attente du lancement par l'animateur.</p>
+      <section
+        v-if="snapshot?.state === 'question_active' && snapshot.currentQuestion"
+        class="game-question"
+      >
+        <QuestionCard
+          :question="snapshot.currentQuestion"
+          :question-index="snapshot.currentQuestionIndex + 1"
+          :total-questions="snapshot.totalQuestions"
+          :disabled="isOwner || alreadyAnswered || answerSubmitting"
+          :read-only="isOwner"
+          @submit="submitAnswer"
+        />
+        <p v-if="isOwner" class="answer-progress">
+          {{ answeredCount }} / {{ connectedPlayerCount }} ont répondu
+        </p>
+        <p v-else-if="alreadyAnswered" class="answer-sent">
+          Réponse envoyée, en attente des autres joueurs.
+        </p>
+        <p v-if="answerError" class="answer-error" role="alert">{{ answerError }}</p>
+      </section>
       <section class="chat" aria-label="Tchat de la salle">
         <header class="chat-header">
           <h2>Tchat</h2>
@@ -259,19 +309,34 @@ h1 {
   border: 0;
   border-radius: 8px;
   padding: 0.65rem 1rem;
-  background: #16a34a;
+  background: #2563eb;
   color: white;
   font-weight: 700;
   cursor: pointer;
 }
 
 .start-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.7;
 }
 
 .start-error {
   margin: 0.5rem 0 0;
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.game-question {
+  margin-top: 1.5rem;
+}
+
+.answer-progress,
+.answer-sent {
+  color: #475569;
+  font-weight: 700;
+}
+
+.answer-error {
   color: #b91c1c;
   font-size: 0.875rem;
 }
