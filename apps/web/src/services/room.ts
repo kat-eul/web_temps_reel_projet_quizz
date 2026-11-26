@@ -1,5 +1,5 @@
 import type { CreateRoomInput, Room, RoomPollResponse } from '@quizz/shared';
-import { getStoredSession } from './auth';
+import { getStoredSession, handleUnauthorized } from './auth';
 
 const API_BASE = '/api';
 
@@ -7,6 +7,7 @@ export async function listRooms(): Promise<Room[]> {
   const response = await fetch(`${API_BASE}/rooms`);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized();
     throw new Error(payload?.message ?? 'Impossible de charger les salles.');
   }
   return payload as Room[];
@@ -21,9 +22,45 @@ export async function pollRooms(
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized();
     throw new Error(payload?.message ?? 'Impossible de surveiller les salles.');
   }
   return payload as RoomPollResponse;
+}
+
+export async function getRoomAccess(roomId: number): Promise<{
+  exists: boolean;
+  isMember: boolean;
+  isOwner: boolean;
+  state: string | null;
+}> {
+  const session = getStoredSession();
+  if (!session) {
+    throw new Error('Vous devez être connecté pour accéder à cette salle.');
+  }
+
+  const response = await fetch(`${API_BASE}/rooms/${roomId}/access`, {
+    headers: {
+      Authorization: `Bearer ${session.token}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    handleUnauthorized();
+    throw new Error(payload?.message ?? 'Votre session a expiré.');
+  }
+  if (response.status === 404) {
+    return { exists: false, isMember: false, isOwner: false, state: null };
+  }
+  if (!response.ok) {
+    throw new Error(payload?.message ?? 'Impossible de vérifier l’accès à la salle.');
+  }
+  return payload as {
+    exists: boolean;
+    isMember: boolean;
+    isOwner: boolean;
+    state: string | null;
+  };
 }
 
 export async function createRoom(input: CreateRoomInput): Promise<Room> {
@@ -42,6 +79,7 @@ export async function createRoom(input: CreateRoomInput): Promise<Room> {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized();
     const issues = Array.isArray(payload?.issues)
         ? payload.issues.map((i: unknown) => (typeof i === 'string' ? i : (i as { message?: string }).message ?? String(i)))
         : [];
@@ -67,6 +105,7 @@ export async function joinRoom(roomId: number): Promise<Room> {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized();
     throw new Error(payload?.message ?? 'Impossible de rejoindre la salle.');
   }
   return payload as Room;

@@ -6,7 +6,10 @@
           <p class="eyebrow">Accueil</p>
           <h1>Les salles disponibles</h1>
         </div>
-        <button class="primary" @click="openModal()">Créer une salle</button>
+        <div class="header-actions">
+          <button class="secondary" type="button" @click="logout">Se déconnecter</button>
+          <button class="primary" @click="openModal()">Créer une salle</button>
+        </div>
       </div>
 
       <div v-if="error" class="error-box">{{ error }}</div>
@@ -93,6 +96,11 @@
   align-items: center;
   gap: 1rem;
   margin-bottom: 1.5rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
 }
 
 .eyebrow {
@@ -253,10 +261,12 @@ button:disabled {
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ApiValidationError, createRoom, joinRoom, listRooms, pollRooms } from '../services/room';
+import { clearSession } from '../services/auth';
 import type { Room } from '@quizz/shared';
 
+const route = useRoute();
 const router = useRouter();
 const rooms = ref<Room[]>([]);
 const loading = ref(false);
@@ -354,7 +364,19 @@ function closeModal() {
   isModalOpen.value = false;
 }
 
+function logout() {
+  clearSession();
+  void router.replace({ name: 'login' });
+}
+
 onMounted(() => {
+  const routeError = route.query.erreur;
+  if (typeof routeError === 'string') {
+    error.value = routeError;
+  }
+  if (route.query.erreur !== undefined) {
+    void router.replace({ name: 'home' });
+  }
   void fetchData();
   void startRoomPolling();
 });

@@ -22,6 +22,21 @@ export class RoomController {
     return this.roomService.poll(query.version);
   }
 
+  @Get(':id/access')
+  async getAccess(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{
+    exists: boolean;
+    isMember: boolean;
+    isOwner: boolean;
+    state: 'WAITING' | 'IN_PROGRESS' | 'FINISHED' | null;
+  }> {
+    const authorization = req.headers.authorization ?? '';
+    const userId = this.authService.getAuthenticatedUserId(authorization);
+    return this.roomService.getAccess(id, userId);
+  }
+
   @Get(':id')
   async getById(@Param('id', ParseIntPipe) id: number): Promise<Room> {
     return this.roomService.getById(id);

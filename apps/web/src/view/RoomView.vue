@@ -3,7 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import { useRoute, useRouter } from 'vue-router';
 import type { ChatMessage, Room, RoomClosedPayload } from '@quizz/shared';
 import { io, type Socket } from 'socket.io-client';
-import { getStoredSession } from '../services/auth';
+import { getStoredSession, handleUnauthorized } from '../services/auth';
+import { getRoomAccess } from '../services/room';
 import { useRoomGame } from '../composables/useRoomGame';
 import QuestionCard from '../components/game/QuestionCard.vue';
 import OwnerControls from '../components/game/OwnerControls.vue';
@@ -63,7 +64,32 @@ watch(
 );
 
 onMounted(async () => {
+  const session = getStoredSession();
+  if (!session) {
+    await router.replace({ name: 'login', query: { redirect: route.fullPath } });
+    return;
+  }
+
   const roomId = Number(route.params.id);
+  const access = await getRoomAccess(roomId);
+  if (
+    !access.exists ||
+    (access.state !== 'WAITING' && access.state !== 'IN_PROGRESS')
+  ) {
+    await router.replace({
+      name: 'home',
+      query: { erreur: "Cette salle n'existe plus." },
+    });
+    return;
+  }
+  if (!access.isMember) {
+    await router.replace({
+      name: 'home',
+      query: { erreur: "Vous n'êtes pas membre de cette salle." },
+    });
+    return;
+  }
+
   const response = await fetch(`/api/rooms/${roomId}`);
   const payload = await response.json();
 
@@ -73,56 +99,61 @@ onMounted(async () => {
 
   room.value = payload;
 
-  const session = getStoredSession();
-  if (session) {
-    socket.value = io({
-      auth: { token: session.token },
-    });
+  socket.value = io({
+    auth: { token: session.token },
+  });
 
-    socket.value.on('connect', () => {
-      connectionError.value = '';
-      socket.value?.emit('room:join', { roomId });
+  socket.value.on('connect', () => {
+    connectionError.value = '';
+    socket.value?.emit('room:join', { roomId });
+  });
+  socket.value.on('disconnect', () => {
+    connectionError.value = 'Connexion au tchat perdue. Reconnexion en cours.';
+  });
+  socket.value.on('connect_error', (error: Error) => {
+    if (error.message.includes('Token') || error.message.includes('Unauthorized')) {
+      handleUnauthorized();
+      return;
+    }
+    connectionError.value = 'Impossible de se connecter au tchat.';
+  });
+  socket.value.on('room:participant-updated', (updated: Room) => {
+    room.value = updated;
+  });
+  socket.value.on('room:deleted', () => {
+    room.value = null;
+    void router.replace({
+      name: 'home',
+      query: { erreur: "Cette salle n'existe plus." },
     });
-    socket.value.on('disconnect', () => {
-      connectionError.value = 'Connexion au tchat perdue. Reconnexion en cours.';
-    });
-    socket.value.on('connect_error', () => {
-      connectionError.value = 'Impossible de se connecter au tchat.';
-    });
-    socket.value.on('room:participant-updated', (updated: Room) => {
-      room.value = updated;
-    });
-    socket.value.on('room:deleted', () => {
-      room.value = null;
-    });
-    socket.value.on('room:closed', (_payload: RoomClosedPayload) => {
-      const wasOwner = isOwner.value;
-      room.value = null;
-      showQuitModal.value = false;
-      quitBusy.value = false;
-      if (wasOwner) {
-        void router.push('/home');
-        return;
-      }
-      closedMessage.value = "L'animateur a quitté la salle. Vous allez être redirigé vers l'accueil.";
-      closedRedirectTimeout = setTimeout(() => {
-        void router.push('/home');
-      }, 3000);
-    });
-    socket.value.on('room:chat-history', (history: ChatMessage[]) => {
-      messages.value = [...history].sort(
-        (left, right) =>
-          new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-      );
+  });
+  socket.value.on('room:closed', (_payload: RoomClosedPayload) => {
+    const wasOwner = isOwner.value;
+    room.value = null;
+    showQuitModal.value = false;
+    quitBusy.value = false;
+    if (wasOwner) {
+      void router.push('/home');
+      return;
+    }
+    closedMessage.value = "L'animateur a quitté la salle. Vous allez être redirigé vers l'accueil.";
+    closedRedirectTimeout = setTimeout(() => {
+      void router.push('/home');
+    }, 3000);
+  });
+  socket.value.on('room:chat-history', (history: ChatMessage[]) => {
+    messages.value = [...history].sort(
+      (left, right) =>
+        new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+    );
+    void scrollChatToBottom();
+  });
+  socket.value.on('room:chat-message', (message: ChatMessage) => {
+    if (!messages.value.some((existing) => existing.id === message.id)) {
+      messages.value.push(message);
       void scrollChatToBottom();
-    });
-    socket.value.on('room:chat-message', (message: ChatMessage) => {
-      if (!messages.value.some((existing) => existing.id === message.id)) {
-        messages.value.push(message);
-        void scrollChatToBottom();
-      }
-    });
-  }
+    }
+  });
 });
 
 onBeforeUnmount(() => {

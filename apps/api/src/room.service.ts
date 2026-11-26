@@ -37,6 +37,41 @@ export class RoomService implements OnModuleInit {
     return this.toRoom(room);
   }
 
+  async getAccess(
+    roomId: number,
+    userId: number,
+  ): Promise<{
+    exists: boolean;
+    isMember: boolean;
+    isOwner: boolean;
+    state: 'WAITING' | 'IN_PROGRESS' | 'FINISHED' | null;
+  }> {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      select: {
+        ownerId: true,
+        state: true,
+        participants: {
+          where: { userId },
+          select: { userId: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!room) {
+      return { exists: false, isMember: false, isOwner: false, state: null };
+    }
+
+    const isOwner = room.ownerId === userId;
+    return {
+      exists: true,
+      isMember: isOwner || room.participants.length > 0,
+      isOwner,
+      state: room.state,
+    };
+  }
+
   async getStartData(roomId: number): Promise<{
     quizYaml: string;
     maxPlayers: number;

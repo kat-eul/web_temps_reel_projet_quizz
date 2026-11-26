@@ -14,7 +14,10 @@ async function submit() {
     error.value = '';
     const session = await loginUser({ email: form.email, password: form.password });
     storeSession(session);
-    router.push('/home');
+    const redirect = router.currentRoute.value.query.redirect;
+    const destination =
+      typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/home';
+    await router.push(destination);
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Connexion impossible.';
   } finally {

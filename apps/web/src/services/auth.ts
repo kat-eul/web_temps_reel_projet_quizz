@@ -38,7 +38,57 @@ export function clearSession() {
   localStorage.removeItem('quizz_user');
 }
 
+export function isSessionValid(): boolean {
+  const token = localStorage.getItem('quizz_token');
+  if (!token) {
+    clearSession();
+    return false;
+  }
+
+  try {
+    const parts = token.split('.');
+    if (
+      parts.length !== 3 ||
+      parts.some((part) => !part || !/^[A-Za-z0-9_-]+$/.test(part))
+    ) {
+      clearSession();
+      return false;
+    }
+
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=');
+    const decodedPayload = atob(paddedPayload);
+    const bytes = Uint8Array.from(decodedPayload, (character) => character.charCodeAt(0));
+    const parsedPayload: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (
+      typeof parsedPayload !== 'object' ||
+      parsedPayload === null ||
+      !('exp' in parsedPayload) ||
+      typeof parsedPayload.exp !== 'number' ||
+      !Number.isFinite(parsedPayload.exp) ||
+      parsedPayload.exp <= Date.now() / 1000
+    ) {
+      clearSession();
+      return false;
+    }
+
+    return true;
+  } catch {
+    clearSession();
+    return false;
+  }
+}
+
+export function handleUnauthorized() {
+  clearSession();
+  window.location.assign('/login');
+}
+
 export function getStoredSession() {
+  if (!isSessionValid()) {
+    return null;
+  }
+
   const token = localStorage.getItem('quizz_token');
   const user = localStorage.getItem('quizz_user');
 
@@ -51,4 +101,3 @@ export function getStoredSession() {
     user: JSON.parse(user),
   };
 }
-

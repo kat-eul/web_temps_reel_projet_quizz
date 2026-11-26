@@ -558,6 +558,11 @@ export class RoomGateway implements OnGatewayDisconnect {
       return;
     }
 
+    if (room.state === 'WAITING') {
+      // En attente, la déconnexion du socket ne vaut pas départ explicite de la salle.
+      return;
+    }
+
     const deleted = await this.roomService.leave(membership.roomId, membership.userId);
     if (deleted) {
       this.server.to(`room:${membership.roomId}`).emit('room:deleted', {
